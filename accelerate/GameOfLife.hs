@@ -1,9 +1,16 @@
-module GameOfLife (gameOfLife) where 
+module GameOfLife (gameOfLife, pretty) where 
 
 import Data.Array.Accelerate as A
 import Data.Array.Accelerate.CUDA as CUDA
 import Data.List as List
+import Data.List.Split (chunksOf)
 import Model
+
+
+pretty :: Int -> Array DIM1 Bool -> String
+pretty width = unlines . chunksOf width . List.map (star) . toList
+	where star True = '*'
+	      star False = ' '
 
 -- returns a game of life board of size width x height
 gameOfLife :: Int -> Int -> Model Bool 
@@ -22,11 +29,11 @@ gameOfLife width height = if (width < 3 || height < 3)
 
 
 	-- the initial game of life board
-	initBoard :: [[Agent]] 
-	initBoard = 	[[False, True, True] ++ (replicate (width-3) False), 
-	     		 [True, True, False] ++ (replicate (width-3) False), 
-	     		 [False, True, False]++ (replicate (width-3) False)
-                        ++ replicate (height-3) (replicate width False)]
+	initBoard :: [[Bool]] 
+	initBoard = 	[[False, True, True] ++ (List.replicate (width-3) False), 
+	     		 [True, True, False] ++ (List.replicate (width-3) False), 
+	     		 [False, True, False]++ (List.replicate (width-3) False)]
+                        ++ List.replicate (height-3) (List.replicate width False)
 
 
 
@@ -63,7 +70,7 @@ gameOfLife width height = if (width < 3 || height < 3)
  		
 
 
-	step :: Network -> Acc (Array DIM1 Bool)-> Acc (Array Dim1 Agent)
+	step :: Network -> Acc (Array DIM1 Bool)-> Acc (Array DIM1 Bool)
 	step (Network adj segs) agents = A.zipWith nextCell agents connections
 		where nextCell currentVal liveCells = 
 			currentVal ? ((liveCells ==* 2) ||* (liveCells ==* 3), liveCells ==* 3)
