@@ -8,9 +8,9 @@
 
 module Frabjous.Base where
 
-import List (sort, find)
-import Maybe (maybeToList)
-import Char (isDigit)
+import Data.List (sort, find)
+import Data.Maybe (maybeToList)
+import Data.Char (isDigit)
 
 
 

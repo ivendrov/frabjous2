@@ -10,7 +10,7 @@ module Frabjous.Compiler where
 
 import Frabjous.Base
 import Frabjous.Parser
-import IO
+import System.IO
 import Data.Char (toLower)
 
 
