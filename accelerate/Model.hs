@@ -1,7 +1,8 @@
 module Model where 
 
 import Data.Array.Accelerate as A
-import Data.Array.Accelerate.CUDA as CUDA
+--import Data.Array.Accelerate.CUDA as CUDA
+import Data.Array.Accelerate.Interpreter as Interpreter
 import Data.List as List
 
 
@@ -23,7 +24,7 @@ data Model agent = Model {network :: Network,
 
 runModel (Model network step init) n = helper n init where
 	helper 0 init = init
-	helper n init = helper (n-1) $ CUDA.run $ step network (use init)
+	helper n init = helper (n-1) $ Interpreter.run $ step network (use init)
 
 
 

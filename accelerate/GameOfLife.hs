@@ -1,7 +1,6 @@
 module GameOfLife (gameOfLife, pretty) where 
 
 import Data.Array.Accelerate as A
-import Data.Array.Accelerate.CUDA as CUDA
 import Data.List as List
 import Data.List.Split (chunksOf)
 import Model

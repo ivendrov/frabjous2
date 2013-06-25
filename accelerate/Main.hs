@@ -7,5 +7,5 @@ import GameOfLife
 
 main = do
         args <- getArgs
-        putStrLn . flip seq "la" $ runModel (gameOfLife (read $ args !! 0) (read $ args !! 0)) 1
+        putStrLn . show $  runModel (gameOfLife (read $ args !! 0) (read $ args !! 0)) 2
   
