@@ -15,6 +15,7 @@ import Data.Vector as Vector
 
 
 type Income = Double
+type Vector2D a = Vector (Vector a)
 type Health = Double
 -- SIM DEFINITION --
 baseIncomes, startIncomes :: Vector Double
@@ -24,13 +25,25 @@ startIncomes = fromList [1,2,3,4]
 
 -- NETWORK DEFINITION -- 
 numNbhd = 2
+numSims = 4
 
--- nbhd ! n = neighborhood of nth sim 
-nbhd :: Vector Int
-nbhd = fromList [0,0,1,1]
--- residents ! n = resident sims of nth neighborhood
---residents :: Vector (Vector Int)
-residents =  fromList $ List.map fromList [[0,1], [2,3]] 
+-- a containment is a bipartite graph between two sets of agents, A and B. Every agent in A 
+-- is matched up to (contained in) a single agent in B.
+-- so adjList1 !! n is the containing agent for the nth agent in A
+-- and adjList2 !! n is the set of agents contained in the nth agent of B 
+data ContainmentNetwork = CNetwork { adjList1 :: Vector Int, adjList2 :: Vector2D Int} deriving Show
+
+-- generate a containment network from just the first adjList and a number of containing agents (constant, presumably)
+networkFromAdjList1 :: Vector Int -> Int -> ContainmentNetwork
+networkFromAdjList1 adjList numContainers = CNetwork adjList 
+                                                  (generate 
+                                                   numContainers
+                                                   (`Vector.elemIndices` adjList))
+
+nbhdNetwork = networkFromAdjList1 (fromList [0,0,1,1]) numNbhd
+
+nbhd = adjList1 nbhdNetwork
+residents = adjList2 nbhdNetwork
 
 
 -- BASIC MODEL EQUATIONS (user-specified) -- 
@@ -42,7 +55,6 @@ calcHealth :: Income -> Health
 calcHealth income  =  income * 10
 
 -- UTILITY METHODS / CONVERSIONS (should be handled internally by Frabjous||) --
-
 average :: Vector Double -> Double
 average l = (Vector.sum l) / fromIntegral (Vector.length l)
 
