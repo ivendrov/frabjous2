@@ -12,6 +12,7 @@ import Text.Printf
 import Prelude hiding ( (.), id)
 import Data.List as List
 import Data.Vector as Vector
+import Data.Ord
 
 
 type Income = Double
@@ -19,7 +20,7 @@ type Vector2D a = Vector (Vector a)
 type Health = Double
 -- SIM DEFINITION --
 baseIncomes, startIncomes :: Vector Double
-baseIncomes = fromList [0.8, 1.2, 0.5, 1.5]
+baseIncomes = fromList [0.8, 1.2, 0.5, 1.6]
 startIncomes = fromList [1,2,3,4]
 
 
@@ -27,7 +28,7 @@ startIncomes = fromList [1,2,3,4]
 numNbhd = 2
 numSims = 4
 
--- a containment is a bipartite graph between two sets of agents, A and B. Every agent in A 
+-- a containment network is a bipartite graph between two sets of agents, A and B. Every agent in A 
 -- is matched up to (contained in) a single agent in B.
 -- so adjList1 !! n is the containing agent for the nth agent in A
 -- and adjList2 !! n is the set of agents contained in the nth agent of B 
@@ -40,10 +41,10 @@ networkFromAdjList1 adjList numContainers = CNetwork adjList
                                                    numContainers
                                                    (`Vector.elemIndices` adjList))
 
-nbhdNetwork = networkFromAdjList1 (fromList [0,0,1,1]) numNbhd
+startingNbhdNetwork = networkFromAdjList1 (fromList [0,0,1,1]) numNbhd
 
-nbhd = adjList1 nbhdNetwork
-residents = adjList2 nbhdNetwork
+nbhd = adjList1 startingNbhdNetwork
+residents = adjList2 startingNbhdNetwork
 
 
 -- BASIC MODEL EQUATIONS (user-specified) -- 
@@ -54,27 +55,49 @@ calcIncome baseIncome nbhdAvgIncome = nbhdAvgIncome * baseIncome
 calcHealth :: Income -> Health
 calcHealth income  =  income * 10
 
--- UTILITY METHODS / CONVERSIONS (should be handled internally by Frabjous||) --
+-- UTILITY METHODS / CONVERSIONS (should be at least partly handled by Frabjous||) --
 average :: Vector Double -> Double
 average l = (Vector.sum l) / fromIntegral (Vector.length l)
 
-calcIncomes :: Vector Income -> Vector Income
-calcIncomes avgNbhdIncomes = Vector.zipWith calcIncome baseIncomes (backpermute avgNbhdIncomes nbhd)
+distance :: (Num a) => a -> a -> a
+distance = abs . (-)
 
-calcAverages :: Vector Income -> Vector Income
-calcAverages incomes = Vector.map (average . backpermute incomes) residents
+calcIncomes :: (ContainmentNetwork, Vector Income) -> Vector Income
+calcIncomes (nbhdNetwork, avgNbhdIncomes) = Vector.zipWith calcIncome 
+                                            baseIncomes 
+                                            (backpermute avgNbhdIncomes (adjList1 nbhdNetwork))
+
+calcAverages :: (ContainmentNetwork, Vector Income) -> Vector Income
+calcAverages (nbhdNetwork, incomes) = Vector.map (average . backpermute incomes) 
+                                      (adjList2 nbhdNetwork)
 
 calcHealths :: Vector Income -> Vector Health
 calcHealths = Vector.map calcHealth
+
+movePeople :: (ContainmentNetwork, Vector Income, Vector Income) -> ContainmentNetwork
+movePeople (nbhdNetwork, incomes, avgNbhdIncomes) = 
+    networkFromAdjList1 newNbhds numNbhds
+        where numNbhds = Vector.length (adjList2 nbhdNetwork) 
+              oldNbhds = adjList1 nbhdNetwork
+              newNbhds = Vector.map 
+                         (\sim ->
+                                  (Vector.minIndexBy 
+                                             (comparing (distance sim)) 
+                                             avgNbhdIncomes))
+                          incomes
+        
+        
+    
 
 
 -- MAIN LOGIC (FRP) - should be handled internally -- 
 
 info = proc _ -> do 
-   rec incomes <- delay startIncomes . arr calcIncomes -< avgNbhdIncomes
-       avgNbhdIncomes <-  arr calcAverages -<  incomes
+   rec incomes <- delay startIncomes . arr calcIncomes -< (nbhdNetwork, avgNbhdIncomes)
+       nbhdNetwork <- delay startingNbhdNetwork . arr movePeople -< (nbhdNetwork, incomes, avgNbhdIncomes)
+       avgNbhdIncomes <-  arr calcAverages -<  (nbhdNetwork, incomes)
        healths <- arr calcHealths -< incomes
-   returnA -< (avgNbhdIncomes, incomes, healths)
+   returnA -< ((adjList1 nbhdNetwork), avgNbhdIncomes, incomes)
 
 wire :: WireP () String
 wire = forI 20 . arr show . info
