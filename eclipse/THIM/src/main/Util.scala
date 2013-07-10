@@ -2,6 +2,7 @@ package main
 
 import scala.collection.GenTraversableOnce
 import scala.util.Random
+import scala.language.implicitConversions
 
 object Util {
   type Income = Double
@@ -36,4 +37,14 @@ object Util {
 	 */		       
 	def randTrue(prob : Double) =
 	  Random.nextDouble() < prob
+	  
+	var prevTime : Long = 0
+	def startLog(){
+	  prevTime = System.nanoTime()
+	}
+	def logTime(note : String){
+	  val next = System.nanoTime()
+	  println(note + (next - prevTime).toDouble / 1000000000)  
+      prevTime = next 
+	}
 }
