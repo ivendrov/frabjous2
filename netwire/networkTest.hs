@@ -24,6 +24,7 @@ baseIncomes = fromList [0.8, 1.2, 0.5, 1.6]
 startIncomes = fromList [1,2,3,4]
 
 
+
 -- NETWORK DEFINITION -- 
 numNbhd = 2
 numSims = 4
@@ -97,13 +98,14 @@ info = proc _ -> do
        nbhdNetwork <- delay startingNbhdNetwork . arr movePeople -< (nbhdNetwork, incomes, avgNbhdIncomes)
        avgNbhdIncomes <-  arr calcAverages -<  (nbhdNetwork, incomes)
        healths <- arr calcHealths -< incomes
-   returnA -< ((adjList1 nbhdNetwork), avgNbhdIncomes, incomes)
+       timer <- time -< ()
+   returnA -< (timer, (adjList1 nbhdNetwork), avgNbhdIncomes, incomes)
 
 wire :: WireP () String
 wire = forI 20 . arr show . info
 
 
-control whenInhibited whenProduced wire = loop wire clockSession where
+control whenInhibited whenProduced wire = loop wire (counterSession 1) where
     loop w' session' = do
       (mx, w, session) <- stepSessionP w' session' ()
       case mx of 
