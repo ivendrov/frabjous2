@@ -16,8 +16,8 @@ class Model(val startingSims: Int, val numNbhd: Int) {
 
     def nextState() {
         /*
-		 * COMPUTE STATISTICS
-		 */
+         * COMPUTE STATISTICS
+         */
         val avgNbhdIncomes =
             sims groupBy (_.nbhd) mapValues (_ map (_.income) average)
 
@@ -31,8 +31,8 @@ class Model(val startingSims: Int, val numNbhd: Int) {
         }
 
         /*
-		 * PERFORM AGENT-INTERNAL UPDATES
-		 */
+         * PERFORM AGENT-INTERNAL UPDATES
+         */
         // age everyone by a year
         sims.foreach(_.incrAge())
 
@@ -61,8 +61,8 @@ class Model(val startingSims: Int, val numNbhd: Int) {
             sim.parent = None)
 
         /*
-		 * BIRTH
-		 */
+         * BIRTH
+         */
         // helper function - generates child for a given parent
         def genChild(parent: Sim) =
             Sim.generateChild(parent,
