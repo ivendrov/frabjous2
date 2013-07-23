@@ -14,13 +14,16 @@ import Data.List as List
 import Data.Vector as Vector
 import Data.Ord
 import Data.Monoid
+import Data.Function (on)
+import Data.Graph
+import Data.Tuple (swap)
 
 import Control.Wire.Classes
 
 -- GENERAL NETWORK STUFF (should work both for 2D (DPH) and 1D (GPU) network representations)
-data Network = Network {adjList :: Vector (Vector Int)}
+data Network = Network {adjList :: Vector (Vector Int)} deriving Show
 
-foldAdjList :: Network -> (Vector a -> b) -> Vector a -> Vector b
+foldAdjList :: Network -> (Vector a -> b) -> Vector a -> Vector b 
 -- foldAdjList network agents adjFold returns a vector whose ith element
 -- is adjFold applied to all the neighbours of the ith agent
 foldAdjList network adjFold agents = Vector.map (adjFold . backpermute agents) (adjList network)
@@ -116,26 +119,37 @@ par wires =
                           Left _ -> False
             value = if (Vector.all isRight values) 
                     then Right $ Vector.map right values
-                    else error "not all wires produced" -- TODO fix
+                    else Left mempty -- if a single wire doesn't produce, nothing produces
         in (value, par wires')
  
            
 -- THIS SPECIFIC EXAMPLE
-sirNetwork = Network $ fromList . List.map (fromList) $ [[1],[0,2],[1,3],[2,4],[3]]
-startingStates = fromList [I, S, S, S, S]
+randomNetwork :: RandomGen r => r -> Double -> Int -> Network
+-- randomNetwork rng fraction size = a random network with the given number of nodes. 
+--   each pair of nodes has a "fraction" probability of an edge
+
+randomNetwork rng fraction size = Network $ fromList . List.map (fromList) $ adjList where
+    edges' = List.map snd . List.filter ((<fraction) . fst) . List.zip (randoms rng) $ 
+            [(u,v) | u <- [0 .. size - 1], 
+                     v <- [u+1 .. size -1]]
+    edges = edges' List.++ (List.map swap edges')
+    adjList = List.map (\i -> List.map (snd) . List.filter (\edge -> fst edge == i) $ edges) [0 .. size -1] 
+
+
+
+size = 10
+fraction = 0.3
+sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
+startingStates = Vector.replicate size S // [(0, I)]
 
 sirWire :: WireP (Vector State) (Vector State)
 sirWire = par (Vector.map genCell startingStates) . 
           arr (foldAdjList sirNetwork calcInfectionRate)
 
 
---(par cells . arr (foldAdjList sirNetwork calcInfectionRate))
+sir :: WireP () (Vector State)
 
-sir, sir' :: WireP () (Vector State)
-sir' = proc _ -> do
-         rec states <- delay startingStates . sirWire -< states
-         returnA -< states
-
+-- have to write own combinator because arrow doesn't (probably) satisfy ArrowLoop
 sir = helper startingStates sirWire
                              where 
     helper states wire = mkPure $ \dt _ ->                         
@@ -151,7 +165,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: WireP () String
-wire = forI 60 . arr show . sir
+wire = forI 150 . arr show . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
@@ -160,24 +174,6 @@ control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
         Left ex -> whenInhibited ex
         Right x -> do whenProduced x
                       loop w session
-main = control return (putStrLn) $ wire
-
-{-
-info = proc _ -> do 
-   rec incomes <- delay startIncomes . arr calcIncomes -< (nbhdNetwork, avgNbhdIncomes)
-       nbhdNetwork <- delay startingNbhdNetwork . arr movePeople -< (nbhdNetwork, incomes, avgNbhdIncomes)
-       avgNbhdIncomes <-  arr calcAverages -<  (nbhdNetwork, incomes)
-       healths <- arr calcHealths -< incomes
-       timer <- time -< ()
-   returnA -< (timer, (adjList1 nbhdNetwork), avgNbhdIncomes, incomes)
--}
-{-
-system =
-    proc _ -> do 
-      rec c1 <- countFrom 10 -< 1
-      if even c1
-          then returnA -< 0
-          else do
-              c2 <- countFrom 20 -< 1
-              returnA -< (c1 :: Int) * 100000 + (c2 :: Int)
--}
+main = do 
+  putStrLn . show $ sirNetwork 
+  control return (putStrLn) $ wire
