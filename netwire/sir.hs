@@ -164,8 +164,8 @@ test = proc _ -> do
          rec a <- delay True . arr (not) . arr (==False)  -< a
          returnA -< a
 
-wire :: WireP () String
-wire = forI 150 . arr show . sir
+wire :: Int ->  WireP () String
+wire n = forI n . arr show . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
@@ -175,5 +175,6 @@ control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
         Right x -> do whenProduced x
                       loop w session
 main = do 
+  n <- read
   putStrLn . show $ sirNetwork 
   control return (putStrLn) $ wire
