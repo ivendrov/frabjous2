@@ -30,7 +30,9 @@ foldAdjList network adjFold agents = Vector.map (adjFold . backpermute agents) (
 
 
 -- SIR combinators / data 
-
+data Agent = Agent { income :: Double,
+                     state :: State }
+      
 data State = S | I | R deriving (Eq, Show)
 
 
@@ -175,6 +177,6 @@ control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
         Right x -> do whenProduced x
                       loop w session
 main = do 
-  n <- read
+  n <- readLn
   putStrLn . show $ sirNetwork 
-  control return (putStrLn) $ wire
+  control return (putStrLn) $ (wire n)
