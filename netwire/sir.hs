@@ -31,7 +31,9 @@ foldAdjList network adjFold agents = Vector.map (adjFold . backpermute agents) (
 
 -- SIR combinators / data 
 data Agent = Agent { income :: Double,
-                     state :: State }
+                     state :: State } deriving (Show)
+
+data AgentInputs = AgentInputs { neighbours :: Vector Agent}
       
 data State = S | I | R deriving (Eq, Show)
 
@@ -139,24 +141,36 @@ randomNetwork rng fraction size = Network $ fromList . List.map (fromList) $ adj
 
 
 
-size = 10
+size = 30
 fraction = 0.3
 sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
 startingStates = Vector.replicate size S // [(0, I)]
+startingIncomes = Vector.generate size fromIntegral
+startingAgents = Vector.zipWith Agent startingIncomes startingStates
 
-sirWire :: WireP (Vector State) (Vector State)
-sirWire = par (Vector.map genCell startingStates) . 
+stateWire :: WireP (Vector State) (Vector State)
+stateWire = par (Vector.map genCell startingStates) . 
           arr (foldAdjList sirNetwork calcInfectionRate)
 
 
-sir :: WireP () (Vector State)
+sirWire :: WireP (Vector Agent) (Vector Agent)
+sirWire = proc agents -> do
+            incomes <- par (Vector.replicate size (liftA2 (*) (arr income) (arr income))) -< agents
+            states <- arr $ Vector.map (state) -< agents
+            newStates <- stateWire -< states
+            returnA -< Vector.zipWith Agent incomes newStates
 
--- have to write own combinator because arrow doesn't (probably) satisfy ArrowLoop
-sir = helper startingStates sirWire
-                             where 
-    helper states wire = mkPure $ \dt _ ->                         
-                         let (Right states', wire') = stepWireP wire dt states
-                         in (Right states' , helper states' wire')
+
+
+sir :: WireP () (Vector Agent)
+sir = loopWire startingAgents sirWire
+
+-- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
+-- every time it is evaluated (have to write own combinator because this arrow doesn't satisfy ArrowLoop
+loopWire :: a -> WireP a a -> WireP () a
+loopWire init transition = mkPure $ \ dt _ -> 
+                           let (Right next', transition') = stepWireP transition dt init
+                           in (Right next', loopWire next' transition')
                          
       
      
@@ -167,7 +181,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . sir
+wire n = forI n . arr show . (arr (Vector.map state) &&& arr (Vector.map income)) . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
