@@ -23,6 +23,10 @@ import Control.Wire.Classes
 -- GENERAL NETWORK STUFF (should work both for 2D (DPH) and 1D (GPU) network representations)
 data Network = Network {adjList :: Vector (Vector Int)} deriving Show
 
+
+genNeighbours :: Vector a -> Network -> Vector (Vector a)
+genNeighbours as (Network adj) = Vector.map (Vector.map (as !)) adj
+
 foldAdjList :: Network -> (Vector a -> b) -> Vector a -> Vector b 
 -- foldAdjList network agents adjFold returns a vector whose ith element
 -- is adjFold applied to all the neighbours of the ith agent
@@ -31,9 +35,10 @@ foldAdjList network adjFold agents = Vector.map (adjFold . backpermute agents) (
 
 -- SIR combinators / data 
 data Agent = Agent { income :: Double,
-                     state :: State } deriving (Show)
+                     state :: State,
+                     neighbours :: Vector Agent} deriving (Show)
 
-data AgentInputs = AgentInputs { neighbours :: Vector Agent}
+
       
 data State = S | I | R deriving (Eq, Show)
 
@@ -67,29 +72,28 @@ rateWire' = rateWire (mkStdGen 3)
 
 -- STATECHART specified by a state to wire function,
 -- and a "status" wire that does the plumbing to ensure wires are reset, etc
-infectionRatePerPerson = 0.5
-calcInfectionRate :: Vector State -> Double
+infectionRatePerPerson = 0.4
+calcInfectionRate :: Agent -> Double
 calcInfectionRate = (*infectionRatePerPerson) . 
                     fromIntegral . 
                     Vector.length . 
-                    Vector.filter (==I)
+                    Vector.filter (==I) .
+                    Vector.map (state) .
+                    neighbours
 
 --never = Control.Wire.empty -- event that never triggers 
-type Cell = WireP Double State
 
-stateToWire :: State -> Cell
+stateToWire :: State -> WireP Agent State
 stateToWire state =
     transitions <|> pure state where
         transitions = 
             case state of 
-              S -> pure I . rateWire' 
+              S -> pure I . rateWire' . arr (calcInfectionRate) 
               I -> pure R . after 3
               R -> pure S . after 3
 
 
 
-genCell :: State -> Cell
-genCell = rSwitch stateToWire
 
 -- rSwitch switches between wires based on the given discriminator function "computeWire"
 -- currently, every time its current wire changes output, it plugs the output into computeWire
@@ -127,6 +131,7 @@ par wires =
         in (value, par wires')
  
            
+
 -- THIS SPECIFIC EXAMPLE
 randomNetwork :: RandomGen r => r -> Double -> Int -> Network
 -- randomNetwork rng fraction size = a random network with the given number of nodes. 
@@ -146,19 +151,32 @@ fraction = 0.3
 sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
 startingStates = Vector.replicate size S // [(0, I)]
 startingIncomes = Vector.generate size fromIntegral
-startingAgents = Vector.zipWith Agent startingIncomes startingStates
+startingNeighbours = genNeighbours startingAgents sirNetwork
+startingAgents = Vector.zipWith3 Agent startingIncomes startingStates startingNeighbours
 
-stateWire :: WireP (Vector State) (Vector State)
-stateWire = par (Vector.map genCell startingStates) . 
-          arr (foldAdjList sirNetwork calcInfectionRate)
+
+stateWire ::  WireP Agent State
+stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (state x)) dt x
+
+incomeWire :: WireP Agent Double
+incomeWire = liftA2 (*) (arr income) (arr income)
+
+statesWire :: WireP (Vector Agent) (Vector State)
+statesWire = par (Vector.replicate size stateWire)
+
+incomesWire = par (Vector.replicate size incomeWire)
+
 
 
 sirWire :: WireP (Vector Agent) (Vector Agent)
 sirWire = proc agents -> do
-            incomes <- par (Vector.replicate size (liftA2 (*) (arr income) (arr income))) -< agents
-            states <- arr $ Vector.map (state) -< agents
-            newStates <- stateWire -< states
-            returnA -< Vector.zipWith Agent incomes newStates
+            incomes <- incomesWire -< agents
+            states <- statesWire -< agents
+            let newAgents = Vector.zipWith3 Agent incomes states nbhs
+                nbhs = genNeighbours newAgents sirNetwork
+            returnA -< newAgents
+                                     
+                            
 
 
 
@@ -181,7 +199,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . (arr (Vector.map state) &&& arr (Vector.map income)) . sir
+wire n = forI n . arr show . arr (Vector.map state) . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
