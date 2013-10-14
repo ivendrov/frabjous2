@@ -3,15 +3,16 @@
 
 module Main where
 
+-- NOTE: by default, sequence operations are VECTOR ones
+import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, (.), id, unzip, all, any, zipWith3)
 import Control.Monad hiding (when)
 import Control.Monad.Identity (Identity)
 import Control.Arrow
 import Control.Wire
 import System.Random (mkStdGen)
 import Text.Printf
-import Prelude hiding ( (.), id)
-import Data.List as List
-import Data.Vector as Vector
+import qualified Data.List as List
+import Data.Vector
 import Data.Ord
 import Data.Monoid
 import Data.Maybe (isJust, fromJust)
@@ -26,10 +27,10 @@ type Network = Vector (Vector Int)
 
 
 genNeighbours :: Vector a -> Network -> Vector (Vector a)
-genNeighbours as adj = Vector.map (Vector.map (as !)) adj
+genNeighbours as adj = map (map (as !)) adj
 
 neighboursAdj :: Vector Person -> Network
-neighboursAdj = Vector.map (Vector.map idx . neighbours) 
+neighboursAdj = map (map idx . neighbours) 
 
 
 
@@ -93,9 +94,9 @@ infectionRatePerPerson = 0.4
 calcInfectionRate :: Person -> Double
 calcInfectionRate = (*infectionRatePerPerson) . 
                     fromIntegral . 
-                    Vector.length . 
-                    Vector.filter (==I) .
-                    Vector.map (state) .
+                    length . 
+                    filter (==I) .
+                    map (state) .
                     neighbours
 
 --never = Control.Wire.empty -- event that never triggers 
@@ -139,16 +140,16 @@ par wires =
 
 -- steps each wire by the given timestep
 stepWiresP wires dt inputs = 
-    let dts = Vector.replicate (Vector.length wires) dt 
-        (values, wires') = Vector.unzip $ Vector.zipWith3 stepWireP wires dts inputs 
+    let dts = replicate (length wires) dt 
+        (values, wires') = unzip $ zipWith3 stepWireP wires dts inputs 
         right x = case x of 
                     Right y -> y
                     Left _ -> error "cannot extract right from a Left contructor"
         isRight x = case x of
                       Right _ -> True
                       Left (Last _) -> False
-        value = if (Vector.all isRight values) 
-                then Vector.map right values
+        value = if (all isRight values) 
+                then map right values
                 else error "wires in stepWiresP must produce"  -- if a single wire doesn't produce, nothing produces
         in (value, wires')
  
@@ -171,10 +172,10 @@ randomNetwork rng fraction size =  fromList . List.map (fromList) $ adjList wher
 size = 4
 fraction = 0.8
 sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
-startingStates = Vector.replicate size S // [(0, I)]
-startingIncomes = Vector.generate size fromIntegral
+startingStates = replicate size S // [(0, I)]
+startingIncomes = generate size fromIntegral
 startingNeighbours = genNeighbours startingAgents sirNetwork
-startingAgents = Vector.zipWith4 Person 
+startingAgents = zipWith4 Person 
                  startingIncomes 
                  startingStates 
                  startingNeighbours 
@@ -191,7 +192,7 @@ personWire :: WireP Person PersonBase
 personWire = liftA2 (PersonBase) incomeWire stateWire
 
 personsWire :: WireP (Vector Person) (Vector PersonBase)
-personsWire = par (Vector.replicate size personWire)
+personsWire = par (replicate size personWire)
 
 
 -- DEATH & BIRTH - general functions
@@ -199,48 +200,48 @@ personsWire = par (Vector.replicate size personWire)
 -- that used to be at the ith position before the elements at indices "deletions" were removed
 -- deletions must be in increasing order
 removeIdxMap :: Vector Int -> (Int -> Maybe Int)
-removeIdxMap deletions i = if (Vector.any (==i) deletions) then Nothing
-                           else Just $ i - Vector.length (Vector.takeWhile (<i) deletions)
+removeIdxMap deletions i = if (any (==i) deletions) then Nothing
+                           else Just $ i - length (takeWhile (<i) deletions)
 
-removeMap size deletions = Vector.findIndices (isJust) $ 
-                           Vector.map (removeIdxMap deletions) (fromList [0 .. size - 1])
+removeMap size deletions = findIndices (isJust) $ 
+                           map (removeIdxMap deletions) (fromList [0 .. size - 1])
 
-remove deletions v = backpermute v (removeMap (Vector.length v) deletions)
+remove deletions v = backpermute v (removeMap (length v) deletions)
 
 
 
  -- CUSTOM FUNCTIONS (INPUTS) 
 dead :: Vector Person -> Vector Person
-dead  = Vector.filter (\p -> state p == R)
+dead  = filter (\p -> state p == R)
 
 
 sirWire :: WireP (Vector Person) (Vector Person)
 
-sirWire = helper (Vector.replicate size personWire) where
+sirWire = helper (replicate size personWire) where
     helper wires = mkPure $ 
                    \dt agents ->
                        let (persons, wires') = stepWiresP wires dt agents
-                           newAgents = Vector.zipWith genPerson 
+                           newAgents = zipWith genPerson 
                                                     persons 
-                                                    (Vector.zipWith PersonNetwork 
+                                                    (zipWith PersonNetwork 
                                                            nbhs 
-                                                           (Vector.map idx agents))
+                                                           (map idx agents))
                            oldNetwork = neighboursAdj agents
                            nbhs = genNeighbours newAgents oldNetwork
                            -- PROCESS DEATH
-                           deads = Vector.map (idx) . dead $ newAgents          
+                           deads = map (idx) . dead $ newAgents          
                            livePeople = remove deads persons
-                           newSize = Vector.length livePeople
-                           newNetwork = Vector.map (Vector.map (fromJust) . 
-                                                    Vector.filter (isJust) . 
-                                                    Vector.map (removeIdxMap deads)) 
+                           newSize = length livePeople
+                           newNetwork = map (map (fromJust) . 
+                                                    filter (isJust) . 
+                                                    map (removeIdxMap deads)) 
                                                     (remove deads oldNetwork)
                            -- regenerate
-                           liveAgents = Vector.zipWith genPerson
+                           liveAgents = zipWith genPerson
                                                     livePeople
-                                                    (Vector.zipWith PersonNetwork
+                                                    (zipWith PersonNetwork
                                                            (genNeighbours liveAgents newNetwork)
-                                                           (fromList [0..newSize-1]))
+                                                           (fromList [0..newSize-1])) 
                            
                        in (Right liveAgents, helper (remove deads wires'))
           
@@ -281,7 +282,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . (arr (Vector.map state) &&& arr (Vector.map (Vector.map (idx) . neighbours))) . sir
+wire n = forI n . arr show . (arr (map state) &&& arr (map (map (idx) . neighbours))) . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
