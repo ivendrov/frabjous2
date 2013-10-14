@@ -14,6 +14,7 @@ import Data.List as List
 import Data.Vector as Vector
 import Data.Ord
 import Data.Monoid
+import Data.Maybe (isJust, fromJust)
 import Data.Function (on)
 import Data.Graph
 import Data.Tuple (swap)
@@ -21,22 +22,38 @@ import Data.Tuple (swap)
 import Control.Wire.Classes
 
 -- GENERAL NETWORK STUFF (should work both for 2D (DPH) and 1D (GPU) network representations)
-data Network = Network {adjList :: Vector (Vector Int)} deriving Show
+type Network = Vector (Vector Int)
 
 
 genNeighbours :: Vector a -> Network -> Vector (Vector a)
-genNeighbours as (Network adj) = Vector.map (Vector.map (as !)) adj
+genNeighbours as adj = Vector.map (Vector.map (as !)) adj
 
-foldAdjList :: Network -> (Vector a -> b) -> Vector a -> Vector b 
--- foldAdjList network agents adjFold returns a vector whose ith element
--- is adjFold applied to all the neighbours of the ith agent
-foldAdjList network adjFold agents = Vector.map (adjFold . backpermute agents) (adjList network)
+neighboursAdj :: Vector Person -> Network
+neighboursAdj = Vector.map (Vector.map idx . neighbours) 
+
 
 
 -- SIR combinators / data 
-data Agent = Agent { income :: Double,
+data Person = Person { income :: Double,
                      state :: State,
-                     neighbours :: Vector Agent} deriving (Show)
+                     neighbours :: Vector Person,
+                     idxPerson :: Int} deriving (Show)
+
+data PersonBase = PersonBase {income' :: Double,
+                              state' :: State}
+
+data PersonNetwork = PersonNetwork {neighours' :: Vector Person,
+                                    idxPerson' :: Int}
+
+genPerson (PersonBase inc st) (PersonNetwork nbs id) = Person inc st nbs id
+                                               
+
+class Agent a where
+    idx :: a -> Int
+
+instance Agent Person where
+    idx = idxPerson
+               
 
 
       
@@ -73,7 +90,7 @@ rateWire' = rateWire (mkStdGen 3)
 -- STATECHART specified by a state to wire function,
 -- and a "status" wire that does the plumbing to ensure wires are reset, etc
 infectionRatePerPerson = 0.4
-calcInfectionRate :: Agent -> Double
+calcInfectionRate :: Person -> Double
 calcInfectionRate = (*infectionRatePerPerson) . 
                     fromIntegral . 
                     Vector.length . 
@@ -83,7 +100,7 @@ calcInfectionRate = (*infectionRatePerPerson) .
 
 --never = Control.Wire.empty -- event that never triggers 
 
-stateToWire :: State -> WireP Agent State
+stateToWire :: State -> WireP Person State
 stateToWire state =
     transitions <|> pure state where
         transitions = 
@@ -117,18 +134,23 @@ rSwitch computeWire initialState = helper' initialState (stateToWire initialStat
 par :: Vector (WireP a b) -> WireP (Vector a) (Vector b)
 par wires = 
     mkPure $ \dt inputs -> 
-        let dts = Vector.replicate (Vector.length wires) dt 
-            (values, wires') = Vector.unzip $ Vector.zipWith3 stepWireP wires dts inputs 
-            right x = case x of 
-                        Right y -> y
-                        Left _ -> error "cannot extract right from a Left contructor"
-            isRight x = case x of
-                          Right _ -> True
-                          Left _ -> False
-            value = if (Vector.all isRight values) 
-                    then Right $ Vector.map right values
-                    else Left mempty -- if a single wire doesn't produce, nothing produces
-        in (value, par wires')
+        let (value, wires') = stepWiresP wires dt inputs
+        in (Right value, par wires')
+
+-- steps each wire by the given timestep
+stepWiresP wires dt inputs = 
+    let dts = Vector.replicate (Vector.length wires) dt 
+        (values, wires') = Vector.unzip $ Vector.zipWith3 stepWireP wires dts inputs 
+        right x = case x of 
+                    Right y -> y
+                    Left _ -> error "cannot extract right from a Left contructor"
+        isRight x = case x of
+                      Right _ -> True
+                      Left (Last _) -> False
+        value = if (Vector.all isRight values) 
+                then Vector.map right values
+                else error "wires in stepWiresP must produce"  -- if a single wire doesn't produce, nothing produces
+        in (value, wires')
  
            
 
@@ -137,7 +159,7 @@ randomNetwork :: RandomGen r => r -> Double -> Int -> Network
 -- randomNetwork rng fraction size = a random network with the given number of nodes. 
 --   each pair of nodes has a "fraction" probability of an edge
 
-randomNetwork rng fraction size = Network $ fromList . List.map (fromList) $ adjList where
+randomNetwork rng fraction size =  fromList . List.map (fromList) $ adjList where
     edges' = List.map snd . List.filter ((<fraction) . fst) . List.zip (randoms rng) $ 
             [(u,v) | u <- [0 .. size - 1], 
                      v <- [u+1 .. size -1]]
@@ -146,41 +168,101 @@ randomNetwork rng fraction size = Network $ fromList . List.map (fromList) $ adj
 
 
 
-size = 30
-fraction = 0.3
+size = 4
+fraction = 0.8
 sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
 startingStates = Vector.replicate size S // [(0, I)]
 startingIncomes = Vector.generate size fromIntegral
 startingNeighbours = genNeighbours startingAgents sirNetwork
-startingAgents = Vector.zipWith3 Agent startingIncomes startingStates startingNeighbours
+startingAgents = Vector.zipWith4 Person 
+                 startingIncomes 
+                 startingStates 
+                 startingNeighbours 
+                 (fromList [0 .. size-1])
 
 
-stateWire ::  WireP Agent State
+stateWire ::  WireP Person State
 stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (state x)) dt x
 
-incomeWire :: WireP Agent Double
+incomeWire :: WireP Person Double
 incomeWire = liftA2 (*) (arr income) (arr income)
 
-statesWire :: WireP (Vector Agent) (Vector State)
-statesWire = par (Vector.replicate size stateWire)
+personWire :: WireP Person PersonBase
+personWire = liftA2 (PersonBase) incomeWire stateWire
 
-incomesWire = par (Vector.replicate size incomeWire)
+personsWire :: WireP (Vector Person) (Vector PersonBase)
+personsWire = par (Vector.replicate size personWire)
+
+
+-- DEATH & BIRTH - general functions
+-- removeIdxMap deletions i is the new index of the element 
+-- that used to be at the ith position before the elements at indices "deletions" were removed
+-- deletions must be in increasing order
+removeIdxMap :: Vector Int -> (Int -> Maybe Int)
+removeIdxMap deletions i = if (Vector.any (==i) deletions) then Nothing
+                           else Just $ i - Vector.length (Vector.takeWhile (<i) deletions)
+
+removeMap size deletions = Vector.findIndices (isJust) $ 
+                           Vector.map (removeIdxMap deletions) (fromList [0 .. size - 1])
+
+remove deletions v = backpermute v (removeMap (Vector.length v) deletions)
 
 
 
-sirWire :: WireP (Vector Agent) (Vector Agent)
+ -- CUSTOM FUNCTIONS (INPUTS) 
+dead :: Vector Person -> Vector Person
+dead  = Vector.filter (\p -> state p == R)
+
+
+sirWire :: WireP (Vector Person) (Vector Person)
+
+sirWire = helper (Vector.replicate size personWire) where
+    helper wires = mkPure $ 
+                   \dt agents ->
+                       let (persons, wires') = stepWiresP wires dt agents
+                           newAgents = Vector.zipWith genPerson 
+                                                    persons 
+                                                    (Vector.zipWith PersonNetwork 
+                                                           nbhs 
+                                                           (Vector.map idx agents))
+                           oldNetwork = neighboursAdj agents
+                           nbhs = genNeighbours newAgents oldNetwork
+                           -- PROCESS DEATH
+                           deads = Vector.map (idx) . dead $ newAgents          
+                           livePeople = remove deads persons
+                           newSize = Vector.length livePeople
+                           newNetwork = Vector.map (Vector.map (fromJust) . 
+                                                    Vector.filter (isJust) . 
+                                                    Vector.map (removeIdxMap deads)) 
+                                                    (remove deads oldNetwork)
+                           -- regenerate
+                           liveAgents = Vector.zipWith genPerson
+                                                    livePeople
+                                                    (Vector.zipWith PersonNetwork
+                                                           (genNeighbours liveAgents newNetwork)
+                                                           (fromList [0..newSize-1]))
+                           
+                       in (Right liveAgents, helper (remove deads wires'))
+          
+         
+          
+
+{-
 sirWire = proc agents -> do
-            incomes <- incomesWire -< agents
-            states <- statesWire -< agents
-            let newAgents = Vector.zipWith3 Agent incomes states nbhs
+            persons <- personsWire -< agents
+            let newAgents = Vector.zipWith genPerson persons (Vector.zipWith 
+                                                                    PersonNetwork 
+                                                                    nbhs 
+                                                                    (Vector.map idx agents))
                 nbhs = genNeighbours newAgents sirNetwork
             returnA -< newAgents
-                                     
+-}
+                          
                             
 
 
 
-sir :: WireP () (Vector Agent)
+sir :: WireP () (Vector Person)
 sir = loopWire startingAgents sirWire
 
 -- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
@@ -199,7 +281,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . arr (Vector.map state) . sir
+wire n = forI n . arr show . (arr (Vector.map state) &&& arr (Vector.map (Vector.map (idx) . neighbours))) . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
