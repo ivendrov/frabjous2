@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Arrows #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Main where
 
 -- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, (.), id, unzip, all, any, zipWith3)
+import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, (.), id, unzip, all, any, zipWith3, (++))
 import Control.Monad hiding (when)
 import Control.Monad.Identity (Identity)
 import Control.Arrow
@@ -19,6 +20,7 @@ import Data.Maybe (isJust, fromJust)
 import Data.Function (on)
 import Data.Graph
 import Data.Tuple (swap)
+import Data.Label
 
 import Control.Wire.Classes
 
@@ -29,16 +31,21 @@ type Network = Vector (Vector Int)
 genNeighbours :: Vector a -> Network -> Vector (Vector a)
 genNeighbours as adj = map (map (as !)) adj
 
-neighboursAdj :: Vector Person -> Network
-neighboursAdj = map (map idx . neighbours) 
 
 
+data State = S | I | R deriving (Eq, Show)
 
 -- SIR combinators / data 
-data Person = Person { income :: Double,
-                     state :: State,
-                     neighbours :: Vector Person,
-                     idxPerson :: Int} deriving (Show)
+fclabels [d|
+             data Person = Person { income :: Double,
+                                    state :: State,
+                                    neighbours :: Vector Person,
+                                    idxPerson :: Int}
+
+          |]
+
+neighboursAdj :: Vector Person -> Network
+neighboursAdj = map (map (get idxPerson) . (get neighbours)) 
 
 data PersonBase = PersonBase {income' :: Double,
                               state' :: State}
@@ -51,14 +58,22 @@ genPerson (PersonBase inc st) (PersonNetwork nbs id) = Person inc st nbs id
 
 class Agent a where
     idx :: a -> Int
+    removal, addition :: Vector a -> Vector a -- basically death and birth
+    
 
 instance Agent Person where
-    idx = idxPerson
+    idx = get idxPerson
+    removal = filter (\p -> get state p == R)
+    addition people = if (length people < 1) then fromList []
+                      else fromList [newborn] where
+                          newborn = set idxPerson (length people) . set neighbours (fromList [parent]) $ parent
+                          parent = people ! 0
+    
                
 
 
       
-data State = S | I | R deriving (Eq, Show)
+
 
 
 -- rate generates events according to a poisson process with parameter 1/mu
@@ -96,8 +111,8 @@ calcInfectionRate = (*infectionRatePerPerson) .
                     fromIntegral . 
                     length . 
                     filter (==I) .
-                    map (state) .
-                    neighbours
+                    map (get state) .
+                    get neighbours
 
 --never = Control.Wire.empty -- event that never triggers 
 
@@ -183,10 +198,10 @@ startingAgents = zipWith4 Person
 
 
 stateWire ::  WireP Person State
-stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (state x)) dt x
+stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (get state x)) dt x
 
 incomeWire :: WireP Person Double
-incomeWire = liftA2 (*) (arr income) (arr income)
+incomeWire = liftA2 (*) (arr (get income)) (arr (get income))
 
 personWire :: WireP Person PersonBase
 personWire = liftA2 (PersonBase) incomeWire stateWire
@@ -210,11 +225,6 @@ remove deletions v = backpermute v (removeMap (length v) deletions)
 
 
 
- -- CUSTOM FUNCTIONS (INPUTS) 
-dead :: Vector Person -> Vector Person
-dead  = filter (\p -> state p == R)
-
-
 sirWire :: WireP (Vector Person) (Vector Person)
 
 sirWire = helper (replicate size personWire) where
@@ -229,7 +239,7 @@ sirWire = helper (replicate size personWire) where
                            oldNetwork = neighboursAdj agents
                            nbhs = genNeighbours newAgents oldNetwork
                            -- PROCESS DEATH
-                           deads = map (idx) . dead $ newAgents          
+                           deads = map (idx) . removal $ newAgents          
                            livePeople = remove deads persons
                            newSize = length livePeople
                            newNetwork = map (map (fromJust) . 
@@ -242,8 +252,13 @@ sirWire = helper (replicate size personWire) where
                                                     (zipWith PersonNetwork
                                                            (genNeighbours liveAgents newNetwork)
                                                            (fromList [0..newSize-1])) 
+                           -- PROCESS BIRTH
+                           newborns = addition liveAgents
+                           numNewborn = length newborns
+                           agents3 = liveAgents ++ newborns
                            
-                       in (Right liveAgents, helper (remove deads wires'))
+                           
+                       in (Right agents3, helper ((remove deads wires') ++ (replicate numNewborn personWire)))
           
          
           
@@ -282,7 +297,7 @@ test = proc _ -> do
          returnA -< a
 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . (arr (map state) &&& arr (map (map (idx) . neighbours))) . sir
+wire n = forI n . arr show . (arr (map (get state)) &&& arr (map (map (idx) . (get neighbours)))) . sir
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
