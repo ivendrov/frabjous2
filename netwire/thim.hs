@@ -2,6 +2,7 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 module Main where
 
@@ -23,6 +24,7 @@ import Data.Function (on)
 import Data.Graph
 import Data.Tuple (swap)
 import Data.Label
+import Data.Typeable
 
 import Control.Wire.Classes
 
@@ -230,11 +232,11 @@ fclabels [d|
                                     state :: State,
                                     neighbours :: Vector Person,
                                     nbhd :: Nbhd,
-                                    idxPerson :: Int} -- automatically filled in
+                                    idxPerson :: Int} deriving Typeable-- automatically filled in
 
              data Nbhd = Nbhd { avgIncome :: Double,
                                 residents :: Vector Person,
-                                idxNbhd :: Int} -- automatically filled in
+                                idxNbhd :: Int} deriving Typeable-- automatically filled in
 
           |]
 
@@ -338,7 +340,6 @@ evenlyDistribute people nbhds = map (nbhds!) $ map (`mod` n) (fromList [0 .. nPe
 
 -- CODE BELOW IS BEING REFACTORED 
 
-
 tieMany agents adj = map (map (agents !)) adj
 tieOne agents adj = map (agents !) adj
 getIdxMany :: (Agent a) => Vector (Vector a) -> Vector (Vector Int)
@@ -394,27 +395,25 @@ computeNetworkManyOne computeAdj (labelA, labelB) (as, bs) =
                    networkTransposeOneMany vi = map residents (fromList [0.. length vi - 1]) where
                                                   residents i = findIndices (==i) vi -- TODO optimize
                          
-            
-processDeathMany :: (Agent a, Agent b) =>
-                    (a :-> Vector b) -> Vector b -> Vector Int -> Vector a -> Vector a 
-processDeathMany label newBs deadBs as = 
-    zipWith (set label) newNeighbours as where
-        newNeighbours = tieMany newBs newAdj
-        newAdj = dieMany deadBs oldAdj
-        oldAdj = getIdxMany oldNeighbours
-        oldNeighbours = map (get label) as
-
-processDeathOne :: (Agent a, Agent b) =>
-                   (a :-> b) -> Vector b -> Vector Int -> Vector a -> Vector a
-processDeathOne label newBs deadBs as = 
-    zipWith (set label) newNeighbours as where
-        newNeighbours = tieOne newBs newAdj
-        newAdj = dieOne deadBs oldAdj
-        oldAdj = getIdxOne oldNeighbours
-        oldNeighbours = map (get label) as
-
-
-
+       
+processDeath :: (Agent a, Agent b, Typeable setB, Typeable b) =>
+                    (a :-> setB) -> Vector b -> Vector Int -> Vector a -> Vector a 
+processDeath label newBs deadBs as = 
+    case (gcast label) of 
+      Just label -> -- case label :: a -> Vector b
+          zipWith (set label) newNeighbours as where
+                     newNeighbours = tieMany newBs newAdj
+                     newAdj = dieMany deadBs oldAdj
+                     oldAdj = getIdxMany oldNeighbours
+                     oldNeighbours = map (get label) as 
+      Nothing -> case (gcast label) of
+                   Just label -> -- case label :: a -> b
+                        zipWith (set label) newNeighbours as where
+                                    newNeighbours = tieOne newBs newAdj
+                                    newAdj = dieOne deadBs oldAdj
+                                    oldAdj = getIdxOne oldNeighbours
+                                    oldNeighbours = map (get label) as
+                   Nothing -> error "case not implemented yet"
 
 
 -- AUTOMATICALLY GENERATED FROM ABOVE 
@@ -441,13 +440,13 @@ evolveModel mstate =
       let deadPeople = get removedIndices peopleOutput
           deadNbhds = get removedIndices nbhdOutput
           -- process networks in reponse to death
-          newPeople = processDeathMany neighbours newPeople deadPeople . 
-                      processDeathOne nbhd newNbhds deadNbhds $ people where
+          newPeople = processDeath neighbours newPeople deadPeople . 
+                      processDeath nbhd newNbhds deadNbhds $ people where
                          people = get agents peopleOutput
                                         
       
 
-          newNbhds = processDeathMany residents newPeople deadPeople $ nbhds where
+          newNbhds = processDeath residents newPeople deadPeople $ nbhds where
                          nbhds = get agents nbhdOutput
 
           -- process network change (just functions for now, perhaps generalize to wires)
