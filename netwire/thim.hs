@@ -325,32 +325,62 @@ saskatoonWire = arr (\sask -> set avgIncome (averageIncome . get residents $ sas
             
 initialNbhds = PopulationState (fromList [saskatoonWire,saskatoonWire]) never never
 
+
 -- makes two people neighbours iff their states are equal
-neighboursNetwork :: (Vector Person, Vector Person) -> (Vector Person, Vector Person)
-neighboursNetwork (people1,people2) = 
-    let newPeople = zipWith (set neighbours) newNeighbours people1 where
-            newNeighbours = map (map (newPeople !)) newAdj
-            newAdj = map (map (get idx)) . map (\p -> filter (sameState p) people1) $ people1
-            sameState p1 p2 = get state p1 == get state p2
-    in (newPeople, newPeople)
+sameStateNetwork people = map (\p -> filter (sameState p) people) people where 
+    sameState p1 p2 = get state p1 == get state p2
+
+
+-- computeNetworkSelf computeAdj label as 
+-- recomputes the network between agents in as specified by (map (get labelA) as)
+-- using computeAdj, and returns the resulting calculation
+computeNetworkSelfManyMany :: (Agent a) => 
+                              (Vector a -> Vector (Vector a)) ->
+                              (a :-> Vector a) ->
+                              (Vector a -> Vector a)
+computeNetworkSelfManyMany computeAdj label as = 
+    newAs where
+        newAs = zipWith (set label) newNeighbours as
+        newNeighbours = tieMany newAs newAdj
+        newAdj = map (map (get idx)) $ computeAdj as
+ 
+
+
 
 -- makes person i belong to neighbourhood j of n iff i % n = j
-nbhdNetwork :: (Vector Nbhd, Vector Person) -> (Vector Nbhd, Vector Person)
-nbhdNetwork (nbhds, people) =
-    (newNbhds, newPeople) where
-        newNbhds =  zipWith (set residents) newResident nbhds 
-        newResident = map (map (newPeople !)) newResidentAdj
-        newPeople = zipWith (set nbhd) newNbhd people 
-        newNbhd = map (newNbhds !) newNbhdAdj
-        newNbhdAdj = map (`mod` n) (fromList [0 .. nPeople-1]) where
-                          n = length nbhds
-                          nPeople = length people
-        newResidentAdj = networkTranspose newNbhdAdj where
-                          networkTranspose :: Vector Int -> Vector (Vector Int)
-                          networkTranspose vi = map residents (fromList [0.. length nbhds -1]) where
-                                                     residents i = findIndices (==i) vi
+evenlyDistribute people nbhds = map (nbhds!) $ map (`mod` n) (fromList [0 .. nPeople-1]) where
+    n = length nbhds
+    nPeople = length people
+
+
+-- computeNetwork computeAdj (labelA, labelB) (as, bs)
+-- recomputes the bipartite network between agents in as and bs specified by 
+-- (map (get labelA) as, map (get labelB) bs), 
+-- using the given computeAdj to get the first and taking its transpose to get the second 
+-- and returns the resulting populations
+
+-- many to one version (many a's are mapped to a single b)
+computeNetworkManyOne :: (Agent a, Agent b) => 
+                         (Vector a -> Vector b -> Vector b) -> 
+                         (a :-> b, b :-> Vector a) ->
+                         (Vector a, Vector b) -> 
+                             (Vector a, Vector b)
+computeNetworkManyOne computeAdj (labelA, labelB) (as, bs) = 
+    (newAs, newBs) where 
+        newAs =  zipWith (set labelA) newANeighbours as 
+        newANeighbours = tieOne newBs newAAdj
+        newBs = zipWith (set labelB) newBNeighbours bs 
+        newBNeighbours = tieMany newAs newBAdj
+        newAAdj = map (get idx) $ computeAdj as bs
+        newBAdj = networkTransposeOneMany newAAdj where
+                   networkTransposeOneMany :: Vector Int -> Vector (Vector Int)
+                   networkTransposeOneMany vi = map residents (fromList [0.. length vi - 1]) where
+                                                  residents i = findIndices (==i) vi -- TODO optimize
+                         
             
 
+tieMany agents adj = map (map (agents !)) adj
+tieOne agents adj = map (agents !) adj
 
 
 -- AUTOMATICALLY GENERATED FROM ABOVE 
@@ -402,8 +432,14 @@ evolveModel mstate =
           -- process network change (just functions for now, perhaps generalize to wires)
 
           -- example: generate network where edges are between agents with the same state
-          (newPeople2, _) = neighboursNetwork (newPeople,newPeople)
-          (newNbhds2, newPeople3) = nbhdNetwork (newNbhds, newPeople2)
+          newPeople2 = computeNetworkSelfManyMany 
+                       sameStateNetwork 
+                       neighbours
+                       newPeople
+          (newPeople3, newNbhds2) = computeNetworkManyOne
+                                    evenlyDistribute 
+                                    (nbhd, residents) 
+                                    (newPeople2, newNbhds)
           -- example: only have saskatoon contain susceptible agents - but where do the rest go? SYMMETRY
           
           
