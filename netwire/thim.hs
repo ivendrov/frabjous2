@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Main where
 
@@ -355,15 +356,20 @@ dieOne deads = map (fromJust . removeIdxMap deads) -- throws exception if parent
 -- computeNetworkSelf computeAdj label as 
 -- recomputes the network between agents in as specified by (map (get labelA) as)
 -- using computeAdj, and returns the resulting calculation
-computeNetworkSelfManyMany :: (Agent a) => 
-                              (Vector a -> Vector (Vector a)) ->
-                              (a :-> Vector a) ->
-                              (Vector a -> Vector a)
-computeNetworkSelfManyMany computeAdj label as = 
-    newAs where
-        newAs = zipWith (set label) newNeighbours as
-        newNeighbours = tieMany newAs newAdj
-        newAdj = getIdxMany $ computeAdj as
+computeNetworkSelf :: (Agent a, Typeable a, Typeable setA) => 
+                      (a :-> setA) 
+                      -> (Vector a -> Vector setA) 
+                      -> (Vector a -> Vector a)
+computeNetworkSelf label computeAdj as = 
+    case (gcast label, gcast computeAdj) of
+      (Just (label :: a :-> Vector a),
+       Just (computeAdj :: Vector a -> Vector (Vector a))) ->
+                                         -- many to many case
+                                         newAs where
+                                             newAs = zipWith (set label) newNeighbours as  
+                                             newNeighbours = tieMany newAs newAdj
+                                             newAdj = getIdxMany $ computeAdj as
+      _ -> error "case not implemented"
  
 
 
@@ -371,29 +377,33 @@ computeNetworkSelfManyMany computeAdj label as =
 
 
 
--- computeNetwork computeAdj (labelA, labelB) (as, bs)
+-- computeNetwork (labelA, labelB) (a :-> setA) (as, bs)
 -- recomputes the bipartite network between agents in as and bs specified by 
 -- (map (get labelA) as, map (get labelB) bs), 
 -- using the given computeAdj to get the first and taking its transpose to get the second 
 -- and returns the resulting populations
-
--- many to one version (many a's are mapped to a single b)
-computeNetworkManyOne :: (Agent a, Agent b) => 
-                         (Vector a -> Vector b -> Vector b) -> 
-                         (a :-> b, b :-> Vector a) ->
-                         (Vector a, Vector b) -> 
-                             (Vector a, Vector b)
-computeNetworkManyOne computeAdj (labelA, labelB) (as, bs) = 
-    (newAs, newBs) where 
-        newAs =  zipWith (set labelA) newANeighbours as 
-        newANeighbours = tieOne newBs newAAdj
-        newBs = zipWith (set labelB) newBNeighbours bs 
-        newBNeighbours = tieMany newAs newBAdj
-        newAAdj = getIdxOne $ computeAdj as bs
-        newBAdj = networkTransposeOneMany newAAdj where
+computeNetwork :: (Agent a, Agent b, Typeable a, Typeable b, Typeable setB, Typeable setA) => 
+                         (a :-> setB, b :-> setA) 
+                         -> (Vector a -> Vector b -> Vector setB)  
+                         -> (Vector a, Vector b)  
+                         -> (Vector a, Vector b)
+computeNetwork (labelA, labelB) computeAdj (as, bs) = 
+    case (gcast labelA, gcast labelB, gcast computeAdj) of
+      (Just (labelA :: a :-> b) , 
+       Just (labelB :: b :-> Vector a),
+       Just (computeAdj :: Vector a -> Vector b -> Vector b)) -> 
+           -- many to one version
+          (newAs, newBs) where 
+              newAs =  zipWith (set labelA) newANeighbours as 
+              newANeighbours = tieOne newBs newAAdj
+              newBs = zipWith (set labelB) newBNeighbours bs 
+              newBNeighbours = tieMany newAs newBAdj
+              newAAdj = getIdxOne $ computeAdj as bs
+              newBAdj = networkTransposeOneMany newAAdj where
                    networkTransposeOneMany :: Vector Int -> Vector (Vector Int)
                    networkTransposeOneMany vi = map residents (fromList [0.. length vi - 1]) where
                                                   residents i = findIndices (==i) vi -- TODO optimize
+      _ -> error "case not implemented yet"
                          
        
 processDeath :: (Agent a, Agent b, Typeable setB, Typeable b) =>
@@ -452,13 +462,13 @@ evolveModel mstate =
           -- process network change (just functions for now, perhaps generalize to wires)
 
           -- example: generate network where edges are between agents with the same state
-          newPeople2 = computeNetworkSelfManyMany 
-                       sameStateNetwork 
+          newPeople2 = computeNetworkSelf                      
                        neighbours
+                       sameStateNetwork
                        newPeople
-          (newPeople3, newNbhds2) = computeNetworkManyOne
-                                    evenlyDistribute 
+          (newPeople3, newNbhds2) = computeNetwork
                                     (nbhd, residents) 
+                                     evenlyDistribute 
                                     (newPeople2, newNbhds)
           -- example: only have saskatoon contain susceptible agents - but where do the rest go? SYMMETRY
  
