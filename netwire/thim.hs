@@ -325,10 +325,30 @@ saskatoonWire = arr (\sask -> set avgIncome (averageIncome . get residents $ sas
             
 initialNbhds = PopulationState (fromList [saskatoonWire,saskatoonWire]) never never
 
+-- sample dynamic network specifications : 
 
--- makes two people neighbours iff their states are equal
+-- a. makes two people neighbours iff their states are equal
 sameStateNetwork people = map (\p -> filter (sameState p) people) people where 
     sameState p1 p2 = get state p1 == get state p2
+
+-- b. makes person i belong to neighbourhood j of n iff i % n = j
+evenlyDistribute people nbhds = map (nbhds!) $ map (`mod` n) (fromList [0 .. nPeople-1]) where
+    n = length nbhds
+    nPeople = length people
+
+-- CODE BELOW IS BEING REFACTORED 
+
+
+tieMany agents adj = map (map (agents !)) adj
+tieOne agents adj = map (agents !) adj
+getIdxMany :: (Agent a) => Vector (Vector a) -> Vector (Vector Int)
+getIdxMany = map (map (get idx)) 
+getIdxOne :: (Agent a) => Vector a -> Vector Int
+getIdxOne = map (get idx)
+dieMany deads =  map (regenIndices deads)
+dieOne deads = map (fromJust . removeIdxMap deads) -- throws exception if parent dies without all children dying
+
+
 
 
 -- computeNetworkSelf computeAdj label as 
@@ -342,15 +362,12 @@ computeNetworkSelfManyMany computeAdj label as =
     newAs where
         newAs = zipWith (set label) newNeighbours as
         newNeighbours = tieMany newAs newAdj
-        newAdj = map (map (get idx)) $ computeAdj as
+        newAdj = getIdxMany $ computeAdj as
  
 
 
 
--- makes person i belong to neighbourhood j of n iff i % n = j
-evenlyDistribute people nbhds = map (nbhds!) $ map (`mod` n) (fromList [0 .. nPeople-1]) where
-    n = length nbhds
-    nPeople = length people
+
 
 
 -- computeNetwork computeAdj (labelA, labelB) (as, bs)
@@ -371,16 +388,33 @@ computeNetworkManyOne computeAdj (labelA, labelB) (as, bs) =
         newANeighbours = tieOne newBs newAAdj
         newBs = zipWith (set labelB) newBNeighbours bs 
         newBNeighbours = tieMany newAs newBAdj
-        newAAdj = map (get idx) $ computeAdj as bs
+        newAAdj = getIdxOne $ computeAdj as bs
         newBAdj = networkTransposeOneMany newAAdj where
                    networkTransposeOneMany :: Vector Int -> Vector (Vector Int)
                    networkTransposeOneMany vi = map residents (fromList [0.. length vi - 1]) where
                                                   residents i = findIndices (==i) vi -- TODO optimize
                          
             
+processDeathMany :: (Agent a, Agent b) =>
+                    (a :-> Vector b) -> Vector b -> Vector Int -> Vector a -> Vector a 
+processDeathMany label newBs deadBs as = 
+    zipWith (set label) newNeighbours as where
+        newNeighbours = tieMany newBs newAdj
+        newAdj = dieMany deadBs oldAdj
+        oldAdj = getIdxMany oldNeighbours
+        oldNeighbours = map (get label) as
 
-tieMany agents adj = map (map (agents !)) adj
-tieOne agents adj = map (agents !) adj
+processDeathOne :: (Agent a, Agent b) =>
+                   (a :-> b) -> Vector b -> Vector Int -> Vector a -> Vector a
+processDeathOne label newBs deadBs as = 
+    zipWith (set label) newNeighbours as where
+        newNeighbours = tieOne newBs newAdj
+        newAdj = dieOne deadBs oldAdj
+        oldAdj = getIdxOne oldNeighbours
+        oldNeighbours = map (get label) as
+
+
+
 
 
 -- AUTOMATICALLY GENERATED FROM ABOVE 
@@ -407,27 +441,14 @@ evolveModel mstate =
       let deadPeople = get removedIndices peopleOutput
           deadNbhds = get removedIndices nbhdOutput
           -- process networks in reponse to death
-          newPeople = zipWith (set neighbours) newNeighbours . zipWith (set nbhd) newNbhds' $ people where
+          newPeople = processDeathMany neighbours newPeople deadPeople . 
+                      processDeathOne nbhd newNbhds deadNbhds $ people where
                          people = get agents peopleOutput
-                         newNeighbours = map (map (newPeople !)) newAdj -- this part
-                         newAdj = map (regenIndices deadPeople) oldAdj  -- is what depends
-                         oldAdj = map (map (get idx)) oldNeighbours     -- on the network type
-                         oldNeighbours = map (get neighbours) people
-                         -- nbhd part
-                         newNbhds' = map (newNbhds!) newAdj'
-                         newAdj' = map (fromJust . removeIdxMap deadNbhds) oldAdj' 
-                         --throws exception if parent dies without all children dying
-                         oldAdj' = map (get idx) oldNbhds'
-                         oldNbhds' = map (get nbhd) people
                                         
       
 
-          newNbhds = zipWith (set residents) newResidents nbhds where
+          newNbhds = processDeathMany residents newPeople deadPeople $ nbhds where
                          nbhds = get agents nbhdOutput
-                         newResidents = map (map (newPeople !)) newAdj
-                         newAdj = map (regenIndices deadPeople) oldAdj
-                         oldAdj = map (map (get idx)) oldResidents
-                         oldResidents = map (get residents) nbhds
 
           -- process network change (just functions for now, perhaps generalize to wires)
 
@@ -441,13 +462,7 @@ evolveModel mstate =
                                     (nbhd, residents) 
                                     (newPeople2, newNbhds)
           -- example: only have saskatoon contain susceptible agents - but where do the rest go? SYMMETRY
-          
-          
-        
-                                              
-                                              
-                                
-          
+ 
           
           output = ModelOutput newPeople3 newNbhds2
           mstate' = ModelState peopleState nbhdState
