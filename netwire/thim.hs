@@ -91,7 +91,8 @@ instance Agent Nbhd where
                                   helper avgIncomeWire')
 
                     avgIncomeWire = arr (averageIncome . get residents) 
-                        where averageIncome = sum . map (get income)
+                        where averageIncome people = (sum . map (get income) $ people) 
+                                                     / fromIntegral (length people)
 
 
 
@@ -178,11 +179,11 @@ evolveModel mstate =
 
 
 
-sirWire :: WireP ModelOutput ModelOutput
-sirWire = evolveModel (initialModelState startingModel)       
+modelWire :: WireP ModelOutput ModelOutput
+modelWire = evolveModel (initialModelState startingModel)       
 
-sir :: WireP () ModelOutput
-sir = loopWire startingModel sirWire
+model :: WireP () ModelOutput
+model = loopWire startingModel modelWire
 
 -- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
 -- every time it is evaluated (have to write own combinator because this arrow doesn't satisfy ArrowLoop
@@ -198,8 +199,26 @@ loopWire init transition = mkPure $ \ dt _ ->
 -- ----------------------
 -- 5. I/O 
 wire :: Int ->  WireP () String
-wire n = forI n . arr show . (((arr (map (get state)) &&& arr (map (map (get idx) . (get neighbours))))  
-         . arr (get people))  &&& arr (map (map (get idx) . (get residents)) . (get nbhds))) . sir
+wire n = forI n . arr show . 
+         (model >>> 
+                    (arr (get people) >>> 
+                             (arr (map (get state))
+                              &&& 
+                              arr (map (map (get idx) . (get neighbours)))
+                              &&& 
+                              arr (map (get income))
+                             )
+                             
+                    )
+                    &&&
+                    (arr (get nbhds) >>> 
+                         (arr (map (map (get idx) . (get residents))))
+                         &&&
+                         (arr (map (get avgIncome)))
+                    )
+                    
+                   )
+  
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
