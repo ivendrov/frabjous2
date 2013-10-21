@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Arrows #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -14,19 +13,25 @@ import Control.Arrow
 import Control.Wire
 import Text.Printf
 import qualified Data.List as List
-import Data.Vector
+import Data.Vector hiding (modify)
 import Data.Ord
 import Data.Monoid
 import Data.Graph
-import Data.Label
+import Data.Label (fclabels, get, set, modify, (:->))
 import Data.Typeable
 import Control.Wire.Classes
 
 import Frabjous
 
 
--- USER-SPECIFIED DECLARATIONS
+
+-- ---------------------------------
+-- 1. Global Declarations
 data State = S | I | R deriving (Eq, Show)
+
+
+-- ---------------------------------
+-- 2. Agent (Local) Declarations
 
 fclabels [d|
              data Person = Person { income :: Double,
@@ -42,23 +47,7 @@ fclabels [d|
                               } deriving Typeable
 
           |]
-
-
-                 
-
-
--- MESSY PARTS - NOT YET FORMALIZED                              
-
-instance Agent Person where
-    idx = idxPerson
-    localChangeWire = personWire
-
-instance Agent Nbhd where
-    idx = idxNbhd
-    localChangeWire = saskatoonWire
-    
--- STATECHART specified by a state to wire function,
--- and a "status" wire that does the plumbing to ensure wires are reset, etc
+                       
 infectionRatePerPerson = 0.4
 calcInfectionRate :: Person -> Double
 calcInfectionRate = (*infectionRatePerPerson) . 
@@ -68,6 +57,8 @@ calcInfectionRate = (*infectionRatePerPerson) .
                     map (get state) .
                     get neighbours
 
+-- basically a statechart specified by a state to wire function,
+-- and a "status" wire that does the plumbing to ensure wires are reset, etc
 stateToWire :: State -> WireP Person State
 stateToWire state =
     transitions <|> pure state where
@@ -76,13 +67,6 @@ stateToWire state =
               S -> pure I . rateWire' . arr (calcInfectionRate) 
               I -> pure R . after 3
               R -> pure S . after 3
-           
-
--- THIS SPECIFIC EXAMPLE
-
-size = 8
-
-
 
 
 modifyWire :: WireP a b -> a :-> b -> WireP a a
@@ -97,25 +81,22 @@ stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (get state x)) dt x
 incomeWire :: WireP Person Double
 incomeWire = liftA2 (*) (arr (get income)) (arr (get income))
 
-personWire :: WireP Person Person
-personWire = modifyWire incomeWire income . modifyWire stateWire state -- introduces incorrect ordering. Fix with vertical lens composition
+-- introduces incorrect ordering. Fix with vertical lens composition
 
+instance Agent Person where
+    idx = idxPerson
+    localChangeWire = modifyWire incomeWire income . modifyWire stateWire state 
 
-initialPeople = PopulationState wires removal addition where
-    wires = replicate size personWire
-    removal = arr (filter (\p -> get state p == R))
-    addition = never
-
-averageIncome = sum . map (get income)
-
-saskatoonWire = arr (\sask -> set avgIncome (averageIncome . get residents $ sask) sask)
-            
-initialNbhds = PopulationState (fromList [saskatoonWire,saskatoonWire]) never never
+instance Agent Nbhd where
+    idx = idxNbhd
+    localChangeWire = arr (\nbhd -> set avgIncome (averageIncome . get residents $ nbhd) nbhd) where
+                    averageIncome = sum . map (get income)
 
 
 
+-- ---------------------------------
+-- 3. Population Declarations
 
--- AUTOMATICALLY GENERATED FROM ABOVE 
 fclabels [d|
             data ModelState = ModelState { peopleState :: WireP (Vector Person) (PopulationOutput Person),
                                            nbhdsState :: WireP (Vector Nbhd) (PopulationOutput Nbhd)}
@@ -125,6 +106,44 @@ fclabels [d|
                                              nbhds :: Vector Nbhd}
           |]
 
+
+
+
+
+initialModelState :: ModelOutput -> ModelState
+initialModelState initialOutput  = 
+    ModelState (evolvePopulation initialPeople) (evolvePopulation initialNbhds) where
+        initialPeople = PopulationState wires removal addition where
+            wires = replicate (length (get people initialOutput)) localChangeWire
+            removal = arr (filter (\p -> get state p == R))
+            addition = never
+        initialNbhds = PopulationState wires removal addition where
+            wires = replicate (length (get nbhds initialOutput)) localChangeWire
+            removal = never
+            addition = never
+
+-- ---------------------------------
+-- 4. Network Declarations
+
+-- Would be really cool to have this: 
+-- network people neighbours; neighbours a1 a2 if (get state a1) == (get state a2)
+
+
+-- What we'll have currently:
+-- network people neighbours by (equivalenceClass state)
+-- network people nbhd with nbhds residents by evenlyDistribute
+
+
+
+
+--updateNetwork1 :: ModelOutput :
+
+
+-- ---------------------------------
+-- AUTOMATICALLY GENERATED FROM ABOVE 
+
+
+
 evolveModel :: ModelState -> WireP ModelOutput ModelOutput
 evolveModel mstate = 
     mkGen $ \dt input -> do
@@ -132,70 +151,34 @@ evolveModel mstate =
                                            (get peopleState mstate)
                                            dt
                                            (get people input)
-      (Right nbhdOutput, nbhdState) <- stepWire
-                                       (get nbhdsState mstate)
-                                       dt
-                                       (get nbhds input)
-      let deadPeople = get removedIndices peopleOutput
-          deadNbhds = get removedIndices nbhdOutput
-          -- process networks in reponse to death
-          newPeople = processDeath neighbours newPeople deadPeople . 
-                      processDeath nbhd newNbhds deadNbhds $ people where
-                         people = get agents peopleOutput
-                                        
-       
-
-          newNbhds = processDeath residents newPeople deadPeople $ nbhds where
-                         nbhds = get agents nbhdOutput
-
-          -- process network change (just functions for now, perhaps generalize to wires)
-
-          -- example: generate network where edges are between agents with the same state
-          newPeople2 = computeNetworkSelf                      
-                       neighbours
-                       (equivalenceClass state)
-                       newPeople
-          (newPeople3, newNbhds2) = computeNetwork
-                                    (nbhd, residents) 
-                                     evenlyDistribute 
-                                    (newPeople2, newNbhds)
-          -- example: only have saskatoon contain susceptible agents - but where do the rest go? SYMMETRY
- 
+      (Right nbhdsOutput, nbhdsState) <- stepWire
+                                         (get nbhdsState mstate)
+                                         dt
+                                         (get nbhds input)
+      let peopleDead = get removedIndices peopleOutput
+          nbhdsDead = get removedIndices nbhdsOutput
           
-          output = ModelOutput newPeople3 newNbhds2
-          mstate' = ModelState peopleState nbhdState
+          peopleNew = processDeath neighbours peopleNew peopleDead . 
+                      processDeath nbhd nbhdsNew nbhdsDead $ get agents peopleOutput        
+          nbhdsNew = processDeath residents peopleNew peopleDead $ get agents nbhdsOutput
+
+          
+          output = updateNetwork1 . updateNetwork2 $ ModelOutput peopleNew nbhdsNew where
+                         updateNetwork1 = modify people (computeNetworkSelf
+                                      neighbours
+                                      (equivalenceClass state))            
+                         updateNetwork2 = modify (pairLabel (people, nbhds)) (computeNetwork
+                                                                              (nbhd, residents)
+                                                                              evenlyDistribute)
+
+          mstate' = ModelState peopleState nbhdsState
       return (Right output, evolveModel mstate')
 
 
-initialModel = ModelState (evolvePopulation initialPeople) (evolvePopulation initialNbhds)
-                                                                    
-                     
-    
+
 
 sirWire :: WireP ModelOutput ModelOutput
-sirWire = evolveModel initialModel where              
-                            
--- STARTING STATE
-
-fraction = 0.8
-sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
-startingStates = replicate size S // [(0, I)]
-startingIncomes = generate size fromIntegral
-startingNeighbours = tieMany startingPeople sirNetwork
-startingPeople = zipWith5 Person 
-                 startingIncomes 
-                 startingStates 
-                 startingNeighbours 
-                 (replicate size saskatoon)
-                 (fromList [0 .. size-1])
-
-saskatoon = Nbhd
-            (averageIncome startingPeople)
-            startingPeople
-            0
-
-startingModel = ModelOutput startingPeople (fromList [saskatoon, set idx 1 saskatoon])
-
+sirWire = evolveModel (initialModelState startingModel)       
 
 sir :: WireP () ModelOutput
 sir = loopWire startingModel sirWire
@@ -208,13 +191,11 @@ loopWire init transition = mkPure $ \ dt _ ->
                            in (Right next', loopWire next' transition')
                          
       
-     
-        
-test :: WireP () Bool
-test = proc _ -> do
-         rec a <- delay True . arr (not) . arr (==False)  -< a
-         returnA -< a
 
+
+     
+-- ----------------------
+-- 5. I/O 
 wire :: Int ->  WireP () String
 wire n = forI n . arr show . (((arr (map (get state)) &&& arr (map (map (get idx) . (get neighbours))))  
          . arr (get people))  &&& arr (map (map (get idx) . (get residents)) . (get nbhds))) . sir
@@ -228,5 +209,32 @@ control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
                       loop w session
 main = do 
   n <- readLn
-  putStrLn . show $ sirNetwork 
   control return (putStrLn) $ (wire n)
+
+
+-- ----------------------
+-- 6. Run Configuration
+
+-- STARTING STATE
+
+
+startingPeople = zipWith5 Person 
+                 startingIncomes 
+                 startingStates 
+                 startingNeighbours 
+                 (replicate size (startingNbhds ! 0))
+                 (fromList [0 .. size-1]) 
+    where size = 8
+          fraction = 0.8
+          sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
+          startingStates = replicate size S // [(0, I)]
+          startingIncomes = generate size fromIntegral
+          startingNeighbours = tieMany startingPeople sirNetwork
+
+startingNbhds = zipWith3 Nbhd
+                (replicate initNumNbhds 0)
+                (replicate initNumNbhds (fromList []))
+                (fromList [0..initNumNbhds-1]) 
+    where initNumNbhds = 2
+
+startingModel = ModelOutput startingPeople startingNbhds

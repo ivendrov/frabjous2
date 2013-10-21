@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Arrows #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -36,6 +35,13 @@ import Control.Wire.Classes
 -- A. Utility --
 ----------------
 type AdjList = Vector (Vector Int)
+
+--  0) Label generator (used for networks)
+pairLabel (l1,l2) = point $ 
+               (,) 
+               <$> fstL >- l1
+               <*> sndL >- l2 where
+                   (fstL, sndL) = $(getLabel ''(,))
 
 
 --  1) Removal
