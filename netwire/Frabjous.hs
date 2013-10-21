@@ -95,17 +95,29 @@ rateWire' = rateWire (mkStdGen 3)
 -- TODO: decompose the "every time wire changes" and the "select wire based on a function" 
 --       into two separate combinators. The second combinator could be used to implement
 --       phase shifts in other variables (e.g. income calculation as child vs adult)
-rSwitch computeWire initialState = helper' initialState (computeWire initialState) where
+rSwitch computeWire initialState = helper' initialState (computeWire initialState) where 
     helper' state currentWire = 
-        mkGen $ \dt x -> do
-          (output, currentWire') <- stepWire currentWire dt x
-          case output of 
-            Left _ -> error "status wire should never inhibit"
-            Right newState -> 
-                return (output, 
-                        helper' 
-                          newState           
-                          (if (newState == state) then currentWire' else computeWire newState))
+            mkGen $ \dt x -> do
+              (output, currentWire') <- stepWire currentWire dt x
+              case output of 
+                Left _ -> error "status wire should never inhibit"
+                Right newState -> 
+                    return (output, 
+                            helper'  newState           
+                            (if (newState == state) then currentWire' else computeWire newState))
+
+
+-- statechart :: (a :-> b) -> Wire a b -> Wire a b
+-- statechart label transitions is a wire whose internal state will be the most recent
+-- value produced by transitions; and which is refreshed every time its internal state changes
+statechart label transitions = 
+    mkGen $ \dt x -> 
+        stepWire (rSwitch computeWire (get label x)) dt x where
+            computeWire state = transitions state <|> pure state
+   
+
+
+                    
 
 -- Parallel wire operator (just pure wires for now)
 par :: Vector (WireP a b) -> WireP (Vector a) (Vector b)

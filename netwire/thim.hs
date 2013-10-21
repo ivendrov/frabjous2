@@ -17,7 +17,7 @@ import Data.Vector hiding (modify)
 import Data.Ord
 import Data.Monoid
 import Data.Graph
-import Data.Label (fclabels, get, set, modify, (:->))
+import Data.Label (fclabels, mkLabels, get, set, modify, (:->))
 import Data.Typeable
 import Control.Wire.Classes
 
@@ -33,64 +33,65 @@ data State = S | I | R deriving (Eq, Show)
 -- ---------------------------------
 -- 2. Agent (Local) Declarations
 
-fclabels [d|
-             data Person = Person { income :: Double,
-                                    state :: State,
-                                    neighbours :: Vector Person,
-                                    nbhd :: Nbhd,
-                                    idxPerson :: Int -- automatically filled in
-                                  } deriving Typeable
 
-             data Nbhd = Nbhd { avgIncome :: Double,
-                                residents :: Vector Person,
-                                idxNbhd :: Int -- automatically filled in
-                              } deriving Typeable
+data Person = Person { _income :: Double,
+                       _state :: State,
+                       _neighbours :: Vector Person,
+                       _nbhd :: Nbhd,
+                       _idxPerson :: Int -- automatically filled in
+                     } deriving Typeable
 
-          |]
+data Nbhd = Nbhd { _avgIncome :: Double,
+                   _residents :: Vector Person,
+                   _idxNbhd :: Int -- automatically filled in
+                 } deriving Typeable
+
+mkLabels [''Person, ''Nbhd]
                        
-infectionRatePerPerson = 0.4
-calcInfectionRate :: Person -> Double
-calcInfectionRate = (*infectionRatePerPerson) . 
-                    fromIntegral . 
-                    length . 
-                    filter (==I) .
-                    map (get state) .
-                    get neighbours
-
--- basically a statechart specified by a state to wire function,
--- and a "status" wire that does the plumbing to ensure wires are reset, etc
-stateToWire :: State -> WireP Person State
-stateToWire state =
-    transitions <|> pure state where
-        transitions = 
-            case state of 
-              S -> pure I . rateWire' . arr (calcInfectionRate) 
-              I -> pure R . after 3
-              R -> pure S . after 3
-
-
-modifyWire :: WireP a b -> a :-> b -> WireP a a
-modifyWire w lens = mkPure $ \dt input -> 
-                    let (output, w') = stepWireP w dt input
-                    in case output of
-                         Right o -> (Right (set lens o input), modifyWire w' lens)
-                         Left e -> (Left e, modifyWire w' lens)
-stateWire ::  WireP Person State
-stateWire = mkGen $ \dt x -> stepWire (rSwitch stateToWire (get state x)) dt x
-
-incomeWire :: WireP Person Double
-incomeWire = liftA2 (*) (arr (get income)) (arr (get income))
 
 -- introduces incorrect ordering. Fix with vertical lens composition
 
 instance Agent Person where
     idx = idxPerson
-    localChangeWire = modifyWire incomeWire income . modifyWire stateWire state 
+    localChangeWire = helper incomeWire stateWire where 
+                      helper incomeWire stateWire = 
+                          mkGen $ \dt x -> do
+                            (Right incomeNew, incomeWire') <- stepWire incomeWire dt x
+                            (Right stateNew, stateWire') <-  stepWire stateWire dt x
+                            return (Right $ x {_income = incomeNew,
+                                               _state = stateNew},
+                                    helper incomeWire' stateWire')
+
+                      stateWire = statechart state transitions
+                                  where infectionRatePerPerson = 0.4
+                                        calcInfectionRate :: Person -> Double
+                                        calcInfectionRate = (*infectionRatePerPerson) . 
+                                                            fromIntegral . 
+                                                            length . 
+                                                            filter (==I) .
+                                                            map (get state) .
+                                                            get neighbours
+                                        transitions state = 
+                                            case state of 
+                                              S -> pure I . rateWire' . arr (calcInfectionRate) 
+                                              I -> pure R . after 3
+                                              R -> pure S . after 3
+
+                      incomeWire = liftA2 (*) (arr (get income)) (arr (get income))
+                                
+                               
 
 instance Agent Nbhd where
     idx = idxNbhd
-    localChangeWire = arr (\nbhd -> set avgIncome (averageIncome . get residents $ nbhd) nbhd) where
-                    averageIncome = sum . map (get income)
+    localChangeWire = helper avgIncomeWire where
+                    helper avgIncomeWire = 
+                        mkGen $ \dt x -> do 
+                          (Right avgIncomeNew, avgIncomeWire') <- stepWire avgIncomeWire dt x
+                          return (Right $ x {_avgIncome = avgIncomeNew}, 
+                                  helper avgIncomeWire')
+
+                    avgIncomeWire = arr (averageIncome . get residents) 
+                        where averageIncome = sum . map (get income)
 
 
 
