@@ -1,0 +1,148 @@
+\begin{thebibliography}{10}
+
+\bibitem{AZPH:AZPH56}
+R.~M. Anderson and R.~M. May.
+\newblock {\em Infectious Diseases of Humans Dynamics and Control}.
+\newblock Oxford University Press, 1992.
+
+\bibitem{von_neumann}
+J.~Backus.
+\newblock Can functional programming be liberated from the von {N}eumann style?
+\newblock {\em Comm. {ACM}}, 21(8):613--641, 1978.
+
+\bibitem{dphaskell}
+M.~M. Chakaravarty, R.~Leschinskiy, S.~Peyton-Jones, G.~Keller, and S.~Marlow.
+\newblock Data parallel {H}askell: a status report.
+\newblock In {\em Workshop on Declarative Aspects of Multicore Programming},
+  pages 10--18. {ACM} Press, January 2007.
+
+\bibitem{yampa}
+A.~Courtney, H.~Nilsson, and J.~Peterson.
+\newblock The yampa arcade.
+\newblock {\em Proceedings of the 2003 ACM SIGPLAN Workshop on Haskell}, pages
+  7--18, 2003.
+
+\bibitem{wxfruit}
+A.~Courtney, B.~Robinson, and P.~Hudak.
+\newblock wxfruit, March 2009.
+\newblock \texttt{http://www.haskell.org/haskellwiki/WxFruit}.
+
+\bibitem{fruit}
+A.~A. Courtney.
+\newblock {\em Modeling user interfaces in a functional language}.
+\newblock PhD thesis, Yale University, New Haven, CT, USA, 2004.
+\newblock AAI3125177.
+
+\bibitem{fran}
+C.~Elliott and P.~Hudak.
+\newblock Functional reactive animation.
+\newblock {\em International Conference on Functional Programming}, pages
+  263--273, 1997.
+
+\bibitem{why_fp}
+J.~Hughes.
+\newblock Why functional programming matters.
+\newblock {\em The Computer Journal}, 32(8):98--107, 1989.
+
+\bibitem{mon2arr}
+J.~Hughes.
+\newblock Generalising monads to arrows.
+\newblock {\em Science of Computer Programming}, 37:67--111, 2000.
+
+\bibitem{parsec}
+D.~Leijen and E.~Meijer.
+\newblock Parsec: Direct style monadic parser combinators for the real world.
+\newblock Technical Report UU-CS-2001-27, Department of Computer Science,
+  Universiteit Utrecht, 2001.
+
+\bibitem{RePEc:wop:safiwp:96-06-042}
+N.~Minar, R.~Burkhart, C.~Langton, and M.~Askenazi.
+\newblock The swarm simulation system: A toolkit for building multi-agent
+  simulations.
+\newblock Working Papers 96-06-042, Santa Fe Institute, June 1996.
+
+\bibitem{springerlink:10.1023/A:1009600530279}
+S.~Moss, H.~Gaylard, S.~Wallis, and B.~Edmonds.
+\newblock Sdml: A multi-agent language for organizational modelling.
+\newblock {\em Computational and Mathematical Organization Theory}, 4:43--69,
+  1998.
+\newblock 10.1023/A:1009600530279.
+
+\bibitem{frpcont}
+H.~Nilsson, A.~Courtney, and J.~Peterson.
+\newblock Functional reactive progamming, continued.
+\newblock {\em Proceedings of the 2002 ACM SIGPLAN workshop on Haskell}, pages
+  51--64, 2002.
+
+\bibitem{North:2006:ECT:1122012.1122013}
+M.~J. North, N.~T. Collier, and J.~R. Vos.
+\newblock Experiences creating three implementations of the repast agent
+  modeling toolkit.
+\newblock {\em ACM Trans. Model. Comput. Simul.}, 16:1--25, January 2006.
+
+\bibitem{North2005}
+M.~J. North, T.~R. Howe, N.~T. Collier, and J.~R. Vos.
+\newblock {The repast simphony runtime system}.
+\newblock In C.~M. Macal, M.~J. North, and D.~Sallach, editors, {\em
+  Proceedings of the Agent 2005 Conference on Generative Social Processes
+  Models and Mechanisms}, number~1, pages 151--158, 2005.
+
+\bibitem{system_dyn_approaches}
+N.~Osgood.
+\newblock Systems dynamics and agent-based approaches: Clarifying the
+  terminology and tradeoffs.
+\newblock {\em Proceedings of the First International Congress of Business
+  Dynamics}, 2006.
+
+\bibitem{system_dyn_tradeoffs}
+N.~Osgood.
+\newblock Using traditional and agent based toolsets for system dynamics:
+  Present tradeoffs and future evolution.
+\newblock {\em Proceedings of the 2007 International Conference on System
+  Dynamics}, 2007.
+
+\bibitem{osgood_comorbidities}
+N.~Osgood.
+\newblock Representing progression and interactions of comorbidities in
+  aggregate and individual-based systems models.
+\newblock In {\em Proceedings, The 27th International Conference of the System
+  Dynamics Society}, page~20, Albuquerque, July 2009.
+
+\bibitem{PatersonRA:notation}
+R.~Paterson.
+\newblock A new notation for arrows.
+\newblock In {\em International Conference on Functional Programming}, pages
+  229--240. ACM Press, Sept. 2001.
+
+\bibitem{harness}
+S.~Peyton-Jones, R.~Leshchinskiy, G.~Keller, and M.~M. Chakravarty.
+\newblock Harnessing the multicores: Nested data parallelism in {H}askell.
+\newblock In {\em Conference on Foundations of Software Technology and
+  Theoretical Computer Science}, pages 1--32, 2008.
+
+\bibitem{ab_vs_de}
+H.~Rahmandad and J.~Sterman.
+\newblock Heterogeneity and network structure in the dynamics of contagion:
+  Comparing agent-based and differential equation models.
+\newblock {\em Proceedings of the 2004 International Conference on System
+  Dynamics}, 2004.
+
+\bibitem{anylogic}
+X.~Technologies.
+\newblock {\em AnyLogic (Version 6)}.
+\newblock XJ Technologies, St. Petersburg, Russia, 2007.
+
+\bibitem{Tisue04netlogo:design}
+S.~Tisue.
+\newblock Netlogo: Design and implementation of a multi-agent modeling
+  environment.
+\newblock In {\em Proceedings of Agent}, 2004.
+
+\bibitem{essence}
+P.~Wadler.
+\newblock The essence of functional programming.
+\newblock In {\em Proceedings of the 19th ACM SIGPLAN-SIGACT symposium on
+  Principles of programming languages}, POPL '92, pages 1--14, New York, NY,
+  USA, 1992. ACM.
+
+\end{thebibliography}

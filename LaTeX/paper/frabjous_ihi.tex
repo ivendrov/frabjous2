@@ -1,0 +1,333 @@
+% This is ''sig-alternate.tex'' V1.9 April 2009
+% This file should be compiled with V2.4 of ''sig-alternate.cls'' April 2009
+%
+% This example file demonstrates the use of the 'sig-alternate.cls'
+% V2.4 LaTeX2e document class file. It is for those submitting
+% articles to ACM Conference Proceedings WHO DO NOT WISH TO
+% STRICTLY ADHERE TO THE SIGS (PUBS-BOARD-ENDORSED) STYLE.
+% The 'sig-alternate.cls' file will produce a similar-looking,
+% albeit, 'tighter' paper resulting in, invariably, fewer pages.
+%
+% ----------------------------------------------------------------------------------------------------------------
+% This .tex file (and associated .cls V2.4) produces:
+%       1) The Permission Statement
+%       2) The Conference (location) Info information
+%       3) The Copyright Line with ACM data
+%       4) NO page numbers
+%
+% as against the acm_proc_article-sp.cls file which
+% DOES NOT produce 1) thru' 3) above.
+%
+% Using 'sig-alternate.cls' you have control, however, from within
+% the source .tex file, over both the CopyrightYear
+% (defaulted to 200X) and the ACM Copyright Data
+% (defaulted to X-XXXXX-XX-X/XX/XX).
+% e.g.
+% \CopyrightYear{2007} will cause 2007 to appear in the copyright line.
+% \crdata{0-12345-67-8/90/12} will cause 0-12345-67-8/90/12 to appear in the copyright line.
+%
+% ---------------------------------------------------------------------------------------------------------------
+% This .tex source is an example which *does* use
+% the .bib file (from which the .bbl file % is produced).
+% REMEMBER HOWEVER: After having produced the .bbl file,
+% and prior to final submission, you *NEED* to 'insert'
+% your .bbl file into your source .tex file so as to provide
+% ONE 'self-contained' source file.
+%
+% ================= IF YOU HAVE QUESTIONS =======================
+% Questions regarding the SIGS styles, SIGS policies and
+% procedures, Conferences etc. should be sent to
+% Adrienne Griscti (griscti@acm.org)
+%
+% Technical questions _only_ to
+% Gerald Murray (murray@hq.acm.org)
+% ===============================================================
+%
+% For tracking purposes - this is V1.9 - April 2009
+
+\documentclass{sig-alternate}
+%\documentclass{acm_proc_article-sp}
+
+\usepackage{mathptmx}
+\usepackage{latexsym}
+\usepackage{textcomp}
+\usepackage{mathcomp}
+\usepackage{stmaryrd}
+\usepackage{amssymb}
+
+\usepackage[sort]{natbib}
+\usepackage{booktabs}
+
+% load haskell
+\usepackage{listings}
+\usepackage{listings}
+\lstloadlanguages{Haskell}
+\lstnewenvironment{code}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      basicstyle=\small\ttfamily,
+      flexiblecolumns=false,
+      basewidth={0.5em,0.45em},
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {|}{{$\mid$}}1               
+    }
+\usepackage[caption=false]{subfig}
+\usepackage{color}
+\usepackage{alltt}
+%\usepackage{my-macros}
+
+%graphics stuff
+\usepackage{graphicx}
+\graphicspath{{pics/}}
+
+%borders around figures
+%\usepackage{float}
+%\floatstyle{boxed} 
+%\restylefloat{figure}
+
+\begin{document}
+%
+% --- Author Metadata here ---
+%\conferenceinfo{IHI'12,} {January 28--30, 2012, Miami, Florida, USA.} 
+%\CopyrightYear{2012} 
+%\crdata{978-1-4503-0781-9/12/01} 
+%\clubpenalty=10000 
+%\widowpenalty = 10000
+% --- End of Author Metadata ---
+
+\title{Frabjous|| : A Declarative Framework for Agent-Based Modelling}
+%\subtitle{[Extended Abstract]
+%\titlenote{A full version of this paper is available as
+%\textit{Author's Guide to Preparing ACM SIG Proceedings Using
+%\LaTeX$2_\epsilon$\ and BibTeX} at
+%\texttt{www.acm.org/eaddress.htm}}}
+%
+% You need the command \numberofauthors to handle the 'placement
+% and alignment' of the authors beneath the title.
+%
+% For aesthetic reasons, we recommend 'three authors at a time'
+% i.e. three 'name/affiliation blocks' be placed beneath the title.
+%
+% NOTE: You are NOT restricted in how many 'rows' of
+% ''name/affiliations'' may appear. We just ask that you restrict
+% the number of 'columns' to three.
+%
+% Because of the available 'opening page real-estate'
+% we ask you to refrain from putting more than six authors
+% (two rows with three columns) beneath the article title.
+% More than six makes the first-page appear very cluttered indeed.
+%
+% Use the \alignauthor commands to handle the names
+% and affiliations for an 'aesthetic maximum' of six authors.
+% Add names, affiliations, addresses for
+% the seventh etc. author(s) as the argument for the
+% \additionalauthors command.
+% These 'additional authors' will be output/set for you
+% without further effort on your part as the last section in
+% the body of your article BEFORE References or any Appendices.
+
+\numberofauthors{3} %  in this sample file, there are a *total*
+% of EIGHT authors. SIX appear on the 'first-page' (for formatting
+% reasons) and the remaining two appear in the \additionalauthors section.
+%
+\author{
+% You can go ahead and credit any number of authors here,
+% e.g. one 'row of three' or two rows (consisting of one row of three
+% and a second row of one, two or three).
+%
+% The command \alignauthor (no curly braces needed) should
+% precede each author name, affiliation/snail-mail address and
+% e-mail address. Additionally, tag each line of
+% affiliation/address with \affaddr, and tag the
+% e-mail address with \email.
+%
+% 1st. author
+\alignauthor
+%\emph{Author names removed for anonymous review}
+Ivan Vendrov\\
+      \affaddr{Dept. of Computer Science}\\
+      \affaddr{University of Saskatchewan}\\
+      \affaddr{Saskatoon, SK, Canada}\\
+       \email{ivan.vendrov@usask.ca}
+% 2nd. author
+\alignauthor
+Christopher Dutchyn\\
+       \affaddr{Dept. of Computer Science}\\
+       \affaddr{University of Saskatchewan}\\
+       \affaddr{Saskatoon, SK, Canada}\\
+       \email{dutchyn@cs.usask.ca}
+% 3rd. author
+\alignauthor
+Nathaniel Osgood\\
+       \affaddr{Dept. of Computer Science}\\
+       \affaddr{University of Saskatchewan}\\
+       \affaddr{Saskatoon, SK, Canada}\\
+       \email{osgood@cs.usask.ca}
+}
+
+%\date{30 June 2011}
+
+\maketitle
+
+\begin{abstract}
+-todo-
+\end{abstract}
+
+% A category with the (minimum) three required fields
+\category{D.3.2}{Programming Languages}{Language Classifications - \it functional, parallel, data-flow}
+\category{I.6.5}{Simulation and Modeling}{Model Development}; Modeling Methodologies
+\category{J.3}{Life and Medical Sciences}{Health} 
+
+%!!!
+\terms{Languages, Experimentation}
+
+\keywords
+Functional reactive, functional programming, simulation, dynamic model, domain-specific language, agent-based simulation, agent-based modelling, data parallel programming
+
+\
+
+%%%%%%%%%%%%
+% INTRODUCTION
+%%%%%%%%%%%%
+
+\section{Introduction}
+
+For systems that evolve continuously in space and time, the language of differential equations (DE's) - honed by centuries of application to the physical sciences - has no substitute. Its syntax is extremely terse, with precise mathematical semantics that permit sophisticated analysis. While differential equations are not a natural fit for modelling populations of individuals (these being essentially discrete), the System Dynamics community has used them with great success to model the dynamics of large populations \textit{(insert citations  / examples)}. 
+
+  There are, however,  a number of processes that are difficult to express with differential equations, such as those involving networks or a high degree of heterogeneity in the populations being modelled \cite{system_dyn_tradeoffs}. The need to model these processes is addressed by agent-based (AB) modelling, a more general approach, which involves specifying the behaviour of each individual in the population and allowing the global dynamics to emerge from the interaction of individuals. 
+  
+  The generality of agent-based modelling comes with a number of costs. With existing tools and frameworks, agent-based models are significantly harder to create, extend, and understand; significantly more expensive to calibrate and run; and significantly harder to mathematically analyze relative to models based on systems of differential equations \cite{ab_vs_de}. 
+  
+  Although the increased cognitive and computational costs of agent-based models are to some degree unavoidable due to the models' increased complexity and generality, we argue that these costs have been exacerbated by the use, in many AB modelling frameworks, of imperative languages like Java and C++. While these languages are well-suited for general-purpose programming, they are not good specification languages, due to their verbose nature and hiding of essential details. They generally force modellers and users to think at a low level of abstraction, and fail to cleanly separate the relationships at the heart of the model from implementation details such as input/output, the time-stepping mechanism, and the data structures used \cite{system_dyn_tradeoffs}. 
+  
+  On the other hand, the underlying language of DE models is not imperative but declarative - rather than explicitly specifying rules by which model variables change, differential equations specify relationships between model variables that hold at all times. We believe that the declarative nature of DE models accounts for much of their success by simplifying model creation, modification, and analysis. It then stands to reason that AB models could be similarly simplified by basing them on an appropriate declarative language. To support this hypothesis, we develop such a language and use it to implement a number of standard models from the literature. 
+  
+  
+%%%%%%%%%%%%
+% BACKGROUND
+%%%%%%%%%%%%
+
+\section{Background}
+In this section, we briefly describe the existing languages and technologies we used to create Frabjous||, as well as explain why we chose them.
+\subsection{Haskell}
+
+  Haskell is a purely functional programming language; that is to say, a Haskell program is a list of equations, each defining a value or a function.
+  % EXAMPLE 
+As an example, consider the following Haskell code:
+  \begin{code}
+  b = True
+  f x = 2 * x + 1
+  g = f 2
+  \end{code}
+  
+  Here \lstinline{b} is defined to be the Boolean value True, \lstinline{f} is defined to be the function $f(x) = 2x+1$, and g is defined as $f(2)$, i.e $5$. 
+  
+  Note that the equal sign in a Haskell definition denotes mathematical equality, not the assignment of a value to a variable. The values of \lstinline{b}, \lstinline{f}, and \lstinline{g}, once defined, cannot change for the duration of the program.
+
+  % END EXAMPLE
+  Since Haskell lacks a mechanism for changing the value of a variable, it comes very close to the declarative ideal - specifying what things are, not how they change - and reaps the associated benefits: Haskell programs are often an order of magnitude shorter than programs written in imperative languages, are clearer to read, and are much easier to analyze mathematically (CITE). For these reasons, we have chosen Haskell as the base language of Frabjous||, in that Frabjous|| code is largely composed of segments of Haskell code, and compiles directly to Haskell. \textit{Chris: more about the process}
+  
+ \subsection{Functional Reactive Programming}
+ 
+  A weakness of functional programming is the difficulty of representing systems that vary with time, since there is no mechanism for changing state.  As pioneered by Elliott and Hudak, functional reactive programming (FRP) is a paradigm that augments functional programming with "behaviours" - values that change over time - as well as a set of primitive operations on these values \cite{fran}. This allows complex, time-varying, locally stateful systems to be written in a declarative fashion, as demonstrated by Courtney et al \cite{yampa}. 
+  
+ % EXAMPLE
+   For example, we might model an agent's immunity to a particular disease by the following FRP equation: 
+ \begin{code}
+ immunity = 2 + (sin time)
+ \end{code}
+ where \lstinline{immunity} is a time-varying value - for instance, it has value 2 at time 0, and value 1 at time $\pi$.
+ 
+ Then suppose the agent has, on average, three contacts with infective agents per day. We could model this as a Poisson process: 
+  \begin{code}
+contact = rate 3
+ \end{code}
+ where \lstinline{contact} is \lstinline{True} for a few instants during each day, and \lstinline{False} the rest of the time.
+ 
+Finally, suppose that we want to keep track of the number of \emph{exposures} - the number of times the agent had a contact with an infective while her immunity was particularly low ($<1.5$). This informal specification translates directly to code: 
+\begin{code}
+exposures = count (contact && (immunity < 1.5))
+\end{code}
+  Here \lstinline{count} is an FRP operator that counts the number of instants for which the its argument has value \lstinline{True}.
+
+% EXPLAIN HOW CODE WORKS, then do Haskell example
+ % END EXAMPLE
+    FRP can in fact be viewed as a generalization of differential equations.  An FRP program is essentially a set of equations between time-varying values (in other words, functions of time). But where differential equations are limited to the standard mathematical operations such as addition, multiplication, and the differentiation operator, FRP adds a number of operators (like \lstinline{rate} and \lstinline{count} above) that act on and produce a much richer variety of functions. The differentiation operator is only defined on smooth functions in a vector space, but FRP operators can produce piecewise and step functions of arbitrary sets, which allows us to specify discrete processes. 
+  
+  We use FRP as the basis for our ABM language because its declarative nature provides the transparency, clarity, and concision usually associated with declarative modelling \cite{system_dyn_approaches, system_dyn_tradeoffs}, and because FRP has an explicit, formal semantics \cite{fran} that makes it possible to reason mathematically about programs written in it. 
+  
+  \subsection{Frabjous}
+  
+  The generality of FRP comes at a cost, however. Understanding the syntax used in existing FRP libraries such as Yampa \cite{yampa} or Netwire \cite {netwire} requires familiarity with advanced functional programming concepts such as monads \cite{monads}, arrows \cite{mon2arr}, and applicative functors \cite{applicative}. While these concepts allow for a great deal of conceptual elegance and generality, much of that generality is not necessary for ABM, and so a less general language with syntax oriented towards modellers rather than functional programmers would be desirable. This was precisely the motivation for the development of Frabjous, a domain-specific language for agent-based modelling built on top of FRP \cite{frabjous}.
+  
+  Frabjous demonstrated that core mechanisms of ABM (specifically, state charts) could be expressed in FRP in a much more concise and human-readable form than that of Java code generated by the popular AnyLogic framework \cite{frabjous}, giving evidence to our claim that declarative languages are better suited to ABM than imperative languages, at least for concerns of software engineering. But Frabjous was a proof of concept, not a usable language for ABM; it placed a number of restrictions on agent state, behaviour, and network structure that drastically reduced its generality. In this paper, we redesign and extend Frabjous to yield a language that is still concise and readable, but is general enough to describe, in principle, any agent-based model.
+  
+  
+  
+  
+    
+  
+  
+
+
+
+%%%%%%%%%%%%
+% OLD PAPER STARTS HERE
+%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%
+%	Section: Summary		%
+%%%%%%%%%%%%%%%%
+
+\section{Summary}
+
+%%%%%%%%%%%%%%%%
+%	Section: Future Work	%
+%%%%%%%%%%%%%%%%
+
+\section{Future Work}
+
+%ACKNOWLEDGEMENTS
+\section{Acknowledgements}
+%{\em Acknowledgements removed for anonymous review}
+This work was funded in part by a Natural Science and Engineering Research Council of Canada (NSERC) Undergraduate Student Research Award (USRA).
+
+  
+  
+  
+  
+   
+
+
+%%%%%%%%%%%
+%BIBLIOGRAPHY   %
+%%%%%%%%%%%
+%\nocite{*}
+%\bibliographystyle{plainnat}
+\bibliographystyle{abbrv}
+\setlength{\bibsep}{0.5ex}
+\bibliography{refs}
+
+
+%%%%%%%%%%%
+%	APPENDIX 	%
+%%%%%%%%%%%
+
+%\appendix
+%\section{Appendix}
+
+%source code for sir.hs
+%\lstinputlisting{src/sir.hs}
+
+
+\end{document}
+\endinput

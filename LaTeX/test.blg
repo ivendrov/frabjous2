@@ -1,0 +1,51 @@
+This is BibTeX, Version 0.99d (TeX Live 2012)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: test.aux
+The style file: abbrvnat.bst
+Database file #1: test.bib
+Warning--entry type for "lshort" isn't style-file defined
+--line 34 of file test.bib
+Warning--to sort, need author or key in idiom
+Warning--empty author in idiom
+You've used 5 entries,
+            2773 wiz_defined-function locations,
+            619 strings with 5288 characters,
+and the built_in function-call counts, 1914 in all, are:
+= -- 164
+> -- 100
+< -- 3
++ -- 35
+- -- 30
+* -- 140
+:= -- 289
+add.period$ -- 15
+call.type$ -- 5
+change.case$ -- 24
+chr.to.int$ -- 5
+cite$ -- 13
+duplicate$ -- 98
+empty$ -- 168
+format.name$ -- 36
+if$ -- 403
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 4
+newline$ -- 33
+num.names$ -- 16
+pop$ -- 60
+preamble$ -- 1
+purify$ -- 20
+quote$ -- 0
+skip$ -- 76
+stack$ -- 0
+substring$ -- 27
+swap$ -- 11
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 50
+warning$ -- 2
+while$ -- 15
+width$ -- 0
+write$ -- 68
+(There were 3 warnings)
