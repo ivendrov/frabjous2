@@ -1,0 +1,19 @@
+
+-- ---------------------------------
+-- 1. Global Declarations
+data State = S | I | R deriving (Eq, Show)
+
+
+-- ---------------------------------
+-- 2. Agent (Local) Declarations
+
+
+agent Person { income:: Double, 
+      	       state :: State,
+	       neighbours :: Vector Person,
+	       nbhd :: Nbhd
+	     }
+agent Nbhd { avgIncome :: Double,
+      	     residents :: Vector Person
+           } 
+

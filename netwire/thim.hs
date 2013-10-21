@@ -45,8 +45,8 @@ data Nbhd = Nbhd { _avgIncome :: Double,
                    _residents :: Vector Person,
                    _idxNbhd :: Int -- automatically filled in
                  } deriving Typeable
-
 mkLabels [''Person, ''Nbhd]
+
                        
 
 -- introduces incorrect ordering. Fix with vertical lens composition
