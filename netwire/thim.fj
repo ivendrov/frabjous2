@@ -1,4 +1,5 @@
 
+
 -- ---------------------------------
 -- 1. Global Declarations
 data State = S | I | R deriving (Eq, Show)
@@ -13,7 +14,31 @@ agent Person { income:: Double,
 	       neighbours :: Vector Person,
 	       nbhd :: Nbhd
 	     }
+
+reactive state = statechart state transitions
+                                  where infectionRatePerPerson = 0.4
+                                        calcInfectionRate :: Person -> Double
+                                        calcInfectionRate = (*infectionRatePerPerson) . 
+                                                            fromIntegral . 
+                                                            length . 
+                                                            filter (==I) .
+                                                            map (get state) .
+                                                            get neighbours
+                                        transitions state = 
+                                            case state of 
+                                              S -> pure I . rateWire' . arr (calcInfectionRate) 
+                                              I -> pure R . after 3
+                                              R -> pure S . after 3
+
+reactive income = liftA2 (*) (arr (get income)) (arr (get income))
+
+
 agent Nbhd { avgIncome :: Double,
       	     residents :: Vector Person
            } 
+
+reactive avgIncome = arr (averageIncome . get residents) 
+                        where averageIncome people = (sum . map (get income) $ people) 
+                                                     / fromIntegral (length people)
+
 
