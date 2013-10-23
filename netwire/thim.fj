@@ -1,5 +1,3 @@
-
-
 -- ---------------------------------
 -- 1. Global Declarations
 data State = S | I | R deriving (Eq, Show)
@@ -30,6 +28,7 @@ reactive state = statechart state transitions
                                               I -> pure R . after 3
                                               R -> pure S . after 3
 
+
 reactive income = liftA2 (*) (arr (get income)) (arr (get income))
 
 
@@ -42,3 +41,13 @@ reactive avgIncome = arr (averageIncome . get residents)
                                                      / fromIntegral (length people)
 
 
+population people of Person
+removal = arr (filter (\p -> get state p == R))
+
+
+population nbhds of Nbhd
+
+network people neighbours by (equivalenceClass state)
+
+
+network people nbhd with nbhds residents by evenlyDistribute
