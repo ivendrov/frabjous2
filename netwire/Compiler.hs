@@ -6,13 +6,15 @@ import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Language (haskellDef)
 
-import Data.Maybe (mapMaybe, fromMaybe)
+import Data.Maybe (mapMaybe, fromMaybe, fromJust)
+import Data.Either (rights)
 import Data.List
 import Text.Printf (printf)
 import Data.Data (toConstr, Typeable, Data)
 import Data.Function (on)
 import qualified Language.Haskell.Exts.Parser as Haskell -- needing for working with haskell source code
 import qualified Language.Haskell.Exts.Pretty as Haskell -- needed for working with haskell source code
+import qualified Language.Haskell.Exts.Syntax as Haskell
 import Text.Regex (subRegex, mkRegex) -- used for code generation
 
 
@@ -88,9 +90,9 @@ instance Show Dec where
         where showField (name, str) = printf "_%s %s" name str
               fields' = fields ++ [("idx" ++ name, ":: Int")]-- add index field
     show (VariableDec name code) = 
-        case toOneLine (printf "%sWire %s" name (preprocessReactives code)) of
-          Just decl -> decl
-          Nothing -> error (printf "could not parse wire declaration for %s" name)
+        processReactiveSyntax . preprocessReactives $ printf "%sWire %s" name code
+                 
+                                                                                                         
     show (PopulationDec name _ _ _ ) = "Population " ++ name
 
 -- replaces all occurences of var(t) with (arr (get var)), for any identifier var
@@ -99,17 +101,133 @@ preprocessReactives = clearTs . processTs where
     clearTs input = subRegex (mkRegex "\\(t\\)") input ""
     processTs input = subRegex (mkRegex "[A-z0-9_]+\\(t\\)") input "(arr (get \\0))"
 
+                                 
+-- desugars the reactive syntax "{{" and "}}"
+openReactive = string "{{"
+closeReactive = string "}}"
+processReactiveSyntax :: HaskellString -> HaskellString
+processReactiveSyntax str = 
+    unlines $ map parseDec  (splitReactive str) where
+        parseDec str = case (parse reactiveDec "(unknown - desugaring)" str) of 
+                         Left err -> str -- leave it as is, probably a type declaration
+                         Right dec -> show dec
 
+
+
+ppOneLine = Haskell.prettyPrintWithMode oneLineMode where
+    oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
 -- converts a haskell declaration to an equivalent one-line declaration 
 -- by inserting braces and semicolons in accordance with the layout rules
 toOneLine :: String -> Maybe String
-toOneLine str = fmap (Haskell.prettyPrintWithMode oneLineMode) decl where
-    decl = case Haskell.parseDecl str of 
+toOneLine = (fmap ppOneLine . readDecl) where
+  
+
+readDecl:: String -> Maybe Haskell.Decl
+readDecl str = case Haskell.parseDecl str of 
              Haskell.ParseOk decl -> Just decl
              _ -> Nothing
-    oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
 
--- readDecl (split up toOneLine)
+
+data ReactiveDec = ReactiveDec { lhs :: HaskellString,
+                                 reactiveExps :: [HaskellString], 
+                                 otherExps :: [HaskellString]}
+
+
+instance Show ReactiveDec where
+    show (ReactiveDec lhs rexps oexps) = {- fromJust . toOneLine $ -}
+        if (length rexps == 0) 
+        then lhs ++ " = " ++  (oexps !! 0)
+        else printf "%s = proc input -> do { %s ; returnA -< (%s) }" lhs decs finalExp where 
+                          finalExp =  helper 0 oexps
+                          helper :: Int -> [String] -> String
+                          helper n [exp] = exp 
+                          helper n (exp : exps) = exp ++ (printf " __%d " n) ++ helper (n+1) exps
+                          decs = intercalate ";" (zipWith genDec rexps [0..])
+                          genDec :: String -> Int -> String
+                          genDec rexp n = printf "__%d <- %s -< input" n rexp
+
+-- splits a reactive variable declaration into a bunch of reactiveDecs
+-- note : uses the convention that WHERE must appear on its own line,
+-- and all declarations have to be lined up to it (only one layer of declarations)
+splitReactive :: HaskellString -> [HaskellString]
+
+splitReactive str = case parse fullDeclaration "(unknown - splitting)" str of 
+                      Right decs -> decs
+                      Left err -> error (show err)
+
+fullDeclaration = do 
+  lines <- many (notFollowedBy (many (char ' ') >> string "where ") >>  haskellLine)
+  rest <- subDecs
+  return (case Just rest of 
+            Just decs -> concat lines : decs 
+            Nothing -> [concat lines])
+
+subDecs :: GenParser Char st [String]
+subDecs = do 
+  (first, indent) <- firstSubDec
+  others <- many (subDec indent)
+  return (first : others)
+  
+firstSubDec :: GenParser Char st (String, Int)
+firstSubDec = do 
+  blanks <- many (char ' ')
+  w <- string "where "
+  let total = blanks ++ w
+  let n = length total
+  toEol <- manyTill anyChar eol
+  rest <- many (try (rhsLine n))
+  return (unlines ((total ++ toEol) : rest), n)
+
+-- in a declaration of indentation n, parse a line nested even deeper
+rhsLine :: Int -> GenParser Char st String
+rhsLine n = do 
+  blanks <- count (n + 1) (char ' ')
+  toEol <- manyTill anyChar eol
+  return (blanks ++ toEol)
+
+
+
+subDec indent = do 
+  blanks <- count indent (char ' ')
+  toEol <- manyTill anyChar eol
+  rest <- many (try (rhsLine indent))
+  return (unlines ((blanks ++ toEol): rest))
+
+                          
+  
+
+reactiveDec :: GenParser Char st ReactiveDec
+reactiveDec = do 
+  lhs <- many (noneOf "\n=")
+  eq <- string "= "
+  (others, reactives) <- rhs
+  return (ReactiveDec lhs reactives (traceShow others others))
+
+
+-- parse right hand side of a reactive dec into two lists - exps inside {{ }} and exps outside
+rhs = do 
+  pairs <- many (try rhsPart)
+  last <- many anyChar
+  return (let (others, reactives) = unzip pairs in (others ++ [last], reactives)) where
+                 
+
+rhsPart :: GenParser Char st (String, String)
+rhsPart = do 
+  other <- manyTill anyChar (try openReactive)
+  reactive <- manyTill (noneOf "\n") (try closeReactive)
+  return (other, reactive)
+
+  
+  
+
+lineWithEquals :: GenParser Char st String
+lineWithEquals = do 
+  line <- manyTill (noneOf "\n") (try (string " = "))
+  return line
+  
+
+
+
 
 
 ---------------------------------
