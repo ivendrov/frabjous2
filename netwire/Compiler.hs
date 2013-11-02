@@ -13,6 +13,7 @@ import Data.Data (toConstr, Typeable, Data)
 import Data.Function (on)
 import qualified Language.Haskell.Exts.Parser as Haskell -- needing for working with haskell source code
 import qualified Language.Haskell.Exts.Pretty as Haskell -- needed for working with haskell source code
+import Text.Regex (subRegex, mkRegex) -- used for code generation
 
 
 
@@ -87,8 +88,16 @@ instance Show Dec where
         where showField (name, str) = printf "_%s %s" name str
               fields' = fields ++ [("idx" ++ name, ":: Int")]-- add index field
     show (VariableDec name code) = 
-        printf "%sWire %s" name code
+        case toOneLine (printf "%sWire %s" name (preprocessReactives code)) of
+          Just decl -> decl
+          Nothing -> error (printf "could not parse wire declaration for %s" name)
     show (PopulationDec name _ _ _ ) = "Population " ++ name
+
+-- replaces all occurences of var(t) with (arr (get var)), for any identifier var
+preprocessReactives :: HaskellString -> HaskellString
+preprocessReactives = clearTs . processTs where
+    clearTs input = subRegex (mkRegex "\\(t\\)") input ""
+    processTs input = subRegex (mkRegex "[A-z0-9_]+\\(t\\)") input "(arr (get \\0))"
 
 
 -- converts a haskell declaration to an equivalent one-line declaration 
@@ -99,6 +108,8 @@ toOneLine str = fmap (Haskell.prettyPrintWithMode oneLineMode) decl where
              Haskell.ParseOk decl -> Just decl
              _ -> Nothing
     oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
+
+-- readDecl (split up toOneLine)
 
 
 ---------------------------------
@@ -132,7 +143,7 @@ generateCode (Program preamble decs) =
     in unlines [preamble, 
                 concatMap show agentDecs, 
                 mkLabelsStr,  
-                concatMap show variableDecs,
+                unlines . map (show) $ variableDecs,
                 showAgentInstances agentDecs variableDecs,
                 showModelDecs populationDecs,
                 showInitialState populationDecs,
