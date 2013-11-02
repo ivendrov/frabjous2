@@ -157,8 +157,8 @@ splitReactive str = case parse fullDeclaration "(unknown - splitting)" str of
 
 fullDeclaration = do 
   lines <- many (notFollowedBy (many (char ' ') >> string "where ") >>  haskellLine)
-  rest <- subDecs
-  return (case Just rest of 
+  rest <- optionMaybe (try subDecs)
+  return (case rest of 
             Just decs -> concat lines : decs 
             Nothing -> [concat lines])
 
@@ -389,7 +389,7 @@ showModelEvolution populationDecs networkDecs =
                       printf "modify (pairLabel (%s, %s)) (computeNetwork (%s, %s) network%d)" 
                              n1 n2 l1 l2 n    
               newPops = intercalate " " . map (++"New") $ popNames
-              networkWheres = intercalate ", " $ zipWith networkWhere networkDecs [0..] where
+              networkWheres = intercalate "; " $ zipWith networkWhere networkDecs [0..] where
                   networkWhere :: Dec -> Int -> String
                   networkWhere (NetworkDec _ _ code) n =
                       case toOneLine (printf "network%d = %s" n code) of 
