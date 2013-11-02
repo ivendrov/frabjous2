@@ -23,21 +23,13 @@ wire :: Int ->  WireP () String
 wire n = forI n . arr show . 
          (model >>> 
                     (arr (get people) >>> 
-                             (arr (map (get state))
-                              &&& 
-                              arr (map (map (get idx) . (get neighbours)))
-                              &&& 
-                              arr (map (get income))
-                             )
+
+                             (arr (map (get state)))
+                             &&& 
+			     (arr (map (get income)))                          
+                             
                              
                     )
-                    &&&
-                    (arr (get nbhds) >>> 
-                         (arr (map (map (get idx) . (get residents))))
-                         &&&
-                         (arr (map (get avgIncome)))
-                    )
-                    
                    )
   
 
