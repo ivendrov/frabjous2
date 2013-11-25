@@ -1,0 +1,95 @@
+\begin{thebibliography}{10}
+
+\bibitem{dphaskell}
+M.~M. Chakaravarty, R.~Leschinskiy, S.~Peyton-Jones, G.~Keller, and S.~Marlow.
+\newblock Data parallel {H}askell: a status report.
+\newblock In {\em Workshop on Declarative Aspects of Multicore Programming},
+  pages 10--18. {ACM} Press, January 2007.
+
+\bibitem{accelerate}
+M.~M. Chakravarty, G.~Keller, S.~Lee, T.~L. McDonell, and V.~Grover.
+\newblock Accelerating {H}askell array codes with multicore {GPUs}.
+\newblock In {\em Proceedings of the Sixth Workshop on Declarative Aspects of
+  Multicore Programming}, DAMP '11, pages 3--14, New York, NY, USA, 2011. ACM.
+
+\bibitem{yampa}
+A.~Courtney, H.~Nilsson, and J.~Peterson.
+\newblock The yampa arcade.
+\newblock In {\em Proceedings of the 2003 ACM SIGPLAN workshop on Haskell},
+  Haskell '03, pages 7--18, New York, NY, USA, 2003. ACM.
+
+\bibitem{fran}
+C.~Elliott and P.~Hudak.
+\newblock Functional reactive animation.
+\newblock {\em International Conference on Functional Programming}, pages
+  263--273, 1997.
+
+\bibitem{mon2arr}
+J.~Hughes.
+\newblock Generalising monads to arrows.
+\newblock {\em Science of Computer Programming}, 37:67--111, 2000.
+
+\bibitem{hiv_contact_patterns}
+J.~A. Jacquez, C.~P. Simon, J.~Koopman, L.~Sattenspiel, and T.~Perry.
+\newblock Modeling and analyzing {HIV} transmission: the effect of contact
+  patterns.
+\newblock {\em Mathematical Biosciences}, 92(2):119 -- 199, 1988.
+
+\bibitem{network_structure}
+M.~Keeling.
+\newblock The implications of network structure for epidemic dynamics.
+\newblock {\em Theoretical Population Biology}, 2005; 67(1):1-8.
+
+\bibitem{applicative}
+C.~McBride and R.~Paterson.
+\newblock Applicative programming with effects.
+\newblock {\em J. Funct. Program.}, 18(1):1--13, Jan. 2008.
+
+\bibitem{frpcont}
+H.~Nilsson, A.~Courtney, and J.~Peterson.
+\newblock Functional reactive progamming, continued.
+\newblock {\em Proceedings of the 2002 ACM SIGPLAN workshop on Haskell}, pages
+  51--64, 2002.
+
+\bibitem{system_dyn_approaches}
+N.~Osgood.
+\newblock Systems dynamics and agent-based approaches: Clarifying the
+  terminology and tradeoffs.
+\newblock {\em Proceedings of the First International Congress of Business
+  Dynamics}, 2006.
+
+\bibitem{system_dyn_tradeoffs}
+N.~Osgood.
+\newblock Using traditional and agent based toolsets for system dynamics:
+  Present tradeoffs and future evolution.
+\newblock {\em Proceedings of the 2007 International Conference on System
+  Dynamics}, 2007.
+
+\bibitem{ab_vs_de}
+H.~Rahmandad and J.~Sterman.
+\newblock Heterogeneity and network structure in the dynamics of contagion:
+  Comparing agent-based and differential equation models.
+\newblock {\em Proceedings of the 2004 International Conference on System
+  Dynamics}, 2004.
+
+\bibitem{frabjous}
+O.~Schneider, C.~Dutchyn, and N.~Osgood.
+\newblock Towards frabjous: a two-level system for functional reactive
+  agent-based epidemic simulation.
+\newblock In {\em Proceedings of the 2nd ACM SIGHIT International Health
+  Informatics Symposium}, IHI '12, pages 785--790, New York, NY, USA, 2012.
+  ACM.
+
+\bibitem{netwire}
+E.~Soeylemez.
+\newblock Netwire, 2012.
+\newblock [Online; accessed 29-August-2013].
+
+\bibitem{monads}
+P.~Wadler.
+\newblock Monads for functional programming.
+\newblock In J.~Jeuring and E.~Meijer, editors, {\em Advanced Functional
+  Programming}, volume 925 of {\em Lecture Notes in Computer Science}, pages
+  24--52. Springer Berlin Heidelberg, 1995.
+
+\end{thebibliography}

@@ -1,0 +1,46 @@
+This is BibTeX, Version 0.99d (TeX Live 2012)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: frabjous.aux
+The style file: abbrv.bst
+Database file #1: refs.bib
+You've used 15 entries,
+            2118 wiz_defined-function locations,
+            593 strings with 6365 characters,
+and the built_in function-call counts, 5309 in all, are:
+= -- 537
+> -- 227
+< -- 8
++ -- 91
+- -- 74
+* -- 339
+:= -- 866
+add.period$ -- 50
+call.type$ -- 15
+change.case$ -- 81
+chr.to.int$ -- 0
+cite$ -- 15
+duplicate$ -- 223
+empty$ -- 415
+format.name$ -- 74
+if$ -- 1155
+int.to.chr$ -- 0
+int.to.str$ -- 15
+missing$ -- 14
+newline$ -- 78
+num.names$ -- 32
+pop$ -- 84
+preamble$ -- 1
+purify$ -- 66
+quote$ -- 0
+skip$ -- 170
+stack$ -- 0
+substring$ -- 300
+swap$ -- 67
+text.length$ -- 8
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 60
+warning$ -- 0
+while$ -- 53
+width$ -- 17
+write$ -- 174
