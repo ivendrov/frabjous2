@@ -17,8 +17,8 @@ agent Person { income:: Double,
 reactive state = statechart state transitions
   where infectionRatePerPerson = 0.4
         calcInfectionRate :: Person -> Double
-        calcInfectionRate = (*infectionRatePerPerson) . 
-                             fromIntegral . length . filter (==I) . map (get state) .get neighbours
+        calcInfectionRate p = infectionRatePerPerson * 
+                             (fromIntegral (length (filter (==I) (map (get state) (get neighbours p)))))
         transitions state = 
               case state of 
                      S -> pure I . rateWire' . arr (calcInfectionRate) 
@@ -26,7 +26,7 @@ reactive state = statechart state transitions
                      R -> pure S . after 3
 
 
-reactive income = liftA2 (*) (arr (get income)) (arr (get income))
+reactive income = arr (get income) * 3
 
 
 agent Nbhd { avgIncome :: Double,

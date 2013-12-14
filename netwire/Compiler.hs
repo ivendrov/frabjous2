@@ -63,6 +63,7 @@ data Dec = AgentDec { agentName :: Name,
 ---------------------------------
 ---------------------------------
 
+-- custom Ord implementation; the automatically-derived one tiebreaks by name, which I don't currently need
 decType :: Dec -> Int
 decType (AgentDec _ _ ) = 0
 decType (VariableDec _ _) = 1
@@ -90,27 +91,11 @@ instance Show Dec where
         where showField (name, str) = printf "_%s %s" name str
               fields' = fields ++ [("idx" ++ name, ":: Int")]-- add index field
     show (VariableDec name code) = 
-        processReactiveSyntax . preprocessReactives $ printf "%sWire %s" name code
+        printf "%sWire %s" name code
                  
                                                                                                          
     show (PopulationDec name _ _ _ ) = "Population " ++ name
 
--- replaces all occurences of var(t) with (arr (get var)), for any identifier var
-preprocessReactives :: HaskellString -> HaskellString
-preprocessReactives = clearTs . processTs where
-    clearTs input = subRegex (mkRegex "\\(t\\)") input ""
-    processTs input = subRegex (mkRegex "[A-z0-9_]+\\(t\\)") input "(arr (get \\0))"
-
-                                 
--- desugars the reactive syntax "{{" and "}}"
-openReactive = string "{{"
-closeReactive = string "}}"
-processReactiveSyntax :: HaskellString -> HaskellString
-processReactiveSyntax str = 
-    unlines $ map parseDec  (splitReactive str) where
-        parseDec str = case (parse reactiveDec "(unknown - desugaring)" str) of 
-                         Left err -> str -- leave it as is, probably a type declaration
-                         Right dec -> show dec
 
 
 
@@ -127,95 +112,6 @@ readDecl str = case Haskell.parseDecl str of
              Haskell.ParseOk decl -> Just decl
              _ -> Nothing
 
-
-data ReactiveDec = ReactiveDec { lhs :: HaskellString,
-                                 reactiveExps :: [HaskellString], 
-                                 otherExps :: [HaskellString]}
-
-
-instance Show ReactiveDec where
-    show (ReactiveDec lhs rexps oexps) = {- fromJust . toOneLine $ -}
-        if (length rexps == 0) 
-        then lhs ++ " = " ++  (oexps !! 0)
-        else printf "%s = proc input -> do { %s ; returnA -< (%s) }" lhs decs finalExp where 
-                          finalExp =  helper 0 oexps
-                          helper :: Int -> [String] -> String
-                          helper n [exp] = exp 
-                          helper n (exp : exps) = exp ++ (printf " __%d " n) ++ helper (n+1) exps
-                          decs = intercalate ";" (zipWith genDec rexps [0..])
-                          genDec :: String -> Int -> String
-                          genDec rexp n = printf "__%d <- %s -< input" n rexp
-
--- splits a reactive variable declaration into a bunch of reactiveDecs
--- note : uses the convention that WHERE must appear on its own line,
--- and all declarations have to be lined up to it (only one layer of declarations)
-splitReactive :: HaskellString -> [HaskellString]
-
-splitReactive str = case parse fullDeclaration "(unknown - splitting)" str of 
-                      Right decs -> decs
-                      Left err -> error (show err)
-
-fullDeclaration = do 
-  lines <- many (notFollowedBy (many (char ' ') >> string "where ") >>  haskellLine)
-  rest <- optionMaybe (try subDecs)
-  return (case rest of 
-            Just decs -> concat lines : decs 
-            Nothing -> [concat lines])
-
-subDecs :: GenParser Char st [String]
-subDecs = do 
-  (first, indent) <- firstSubDec
-  others <- many (subDec indent)
-  return (first : others)
-  
-firstSubDec :: GenParser Char st (String, Int)
-firstSubDec = do 
-  blanks <- many (char ' ')
-  w <- string "where "
-  let total = blanks ++ w
-  let n = length total
-  toEol <- manyTill anyChar eol
-  rest <- many (try (rhsLine n))
-  return (unlines ((total ++ toEol) : rest), n)
-
--- in a declaration of indentation n, parse a line nested even deeper
-rhsLine :: Int -> GenParser Char st String
-rhsLine n = do 
-  blanks <- count (n + 1) (char ' ')
-  toEol <- manyTill anyChar eol
-  return (blanks ++ toEol)
-
-
-
-subDec indent = do 
-  blanks <- count indent (char ' ')
-  toEol <- manyTill anyChar eol
-  rest <- many (try (rhsLine indent))
-  return (unlines ((blanks ++ toEol): rest))
-
-                          
-  
-
-reactiveDec :: GenParser Char st ReactiveDec
-reactiveDec = do 
-  lhs <- many (noneOf "\n=")
-  eq <- string "= "
-  (others, reactives) <- rhs
-  return (ReactiveDec lhs reactives (traceShow others others))
-
-
--- parse right hand side of a reactive dec into two lists - exps inside {{ }} and exps outside
-rhs = do 
-  pairs <- many (try rhsPart)
-  last <- many anyChar
-  return (let (others, reactives) = unzip pairs in (others ++ [last], reactives)) where
-                 
-
-rhsPart :: GenParser Char st (String, String)
-rhsPart = do 
-  other <- manyTill anyChar (try openReactive)
-  reactive <- manyTill (noneOf "\n") (try closeReactive)
-  return (other, reactive)
 
   
   
