@@ -1,0 +1,49 @@
+-- ---------------------------------
+-- 1. Global Declarations
+data State = S | I | R deriving (Eq, Show)
+
+-- network people neighbours by (equivalenceClass state)
+
+-- ---------------------------------
+-- 2. Agent (Local) Declarations
+
+
+agent Person { income:: Double, 
+      	       state :: State,
+	       neighbours :: Vector Person,
+	       nbhd :: Nbhd
+	     }
+
+reactive state = statechart state transitions
+  where infectionRatePerPerson = 0.4
+        calcInfectionRate :: Person -> Double
+        calcInfectionRate p = infectionRatePerPerson * 
+                             (fromIntegral (length (filter (==I) (map (get state) (get neighbours p)))))
+        transitions state = 
+              case state of 
+                     S -> pure I . rateWire' . arr (calcInfectionRate) 
+                     I -> pure R . after 3
+                     R -> pure S . after 3
+
+
+reactive income = arr (get income) * 3
+
+
+agent Nbhd { avgIncome :: Double,
+      	     residents :: Vector Person
+           } 
+
+reactive avgIncome = arr (averageIncome . get residents) 
+    where averageIncome people = (sum . map (get income) $ people) 
+                                  / fromIntegral (length people)
+
+
+population people of Person
+removal = arr (filter (\p -> get state p == R))
+
+
+population nbhds of Nbhd
+
+
+
+network people nbhd with nbhds residents by evenlyDistribute

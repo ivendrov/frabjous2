@@ -1,0 +1,73 @@
+-- END GENERATED CODE
+
+modelWire :: WireP ModelOutput ModelOutput
+modelWire = evolveModel (initialModelState startingModel)       
+
+model :: WireP () ModelOutput
+model = loopWire startingModel modelWire
+
+-- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
+-- every time it is evaluated (have to write own combinator because this arrow doesn't satisfy ArrowLoop
+loopWire :: a -> WireP a a -> WireP () a
+loopWire init transition = mkPure $ \ dt _ -> 
+                           let (Right next', transition') = stepWireP transition dt init
+                           in (Right next', loopWire next' transition')
+                         
+      
+
+
+     
+-- ----------------------
+-- 5. I/O 
+wire :: Int ->  WireP () String
+wire n = forI n . arr show . 
+         (model >>> 
+                    (arr (get people) >>> 
+
+                             (arr (map (get state)))
+                             &&& 
+			     (arr (map (get income)))                          
+                             
+                             
+                    )
+                   )
+  
+
+control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
+    loop w' session' = do
+      (mx, w, session) <- stepSessionP w' session' ()
+      case mx of 
+        Left ex -> whenInhibited ex
+        Right x -> do whenProduced x
+                      loop w session
+main = do 
+  n <- readLn
+  control return (putStrLn) $ (wire n)
+
+
+-- ----------------------
+-- 6. Run Configuration
+
+-- STARTING STATE
+
+
+startingPeople = zipWith5 Person 
+                 startingIncomes 
+                 startingStates 
+                 startingNeighbours 
+                 (replicate size (startingNbhds ! 0))
+                 (fromList [0 .. size-1]) 
+    where size = 8
+          fraction = 0.8
+          sirNetwork =  randomNetwork (mkStdGen 32498394823) fraction size
+          startingStates = replicate size S // [(0, I)]
+          startingIncomes = generate size fromIntegral
+          startingNeighbours = tieMany startingPeople sirNetwork
+
+startingNbhds = zipWith3 Nbhd
+                (replicate initNumNbhds 0)
+                (replicate initNumNbhds (fromList []))
+                (fromList [0..initNumNbhds-1]) 
+    where initNumNbhds = 2
+
+startingModel = ModelOutput startingPeople startingNbhds
