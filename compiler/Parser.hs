@@ -15,15 +15,11 @@ module Parser (parseProgram) where
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Language (haskellDef)
+import Control.Applicative ((<*))
 
 import Syntax
 
-parseProgram :: String -> Either ParseError Program
-parseProgram = parse program "unknown"
-
-
-
-
+-- LEXICAL ISSUES
 agentKeyword = "agent"
 variableKeyword = "reactive"
 populationKeyword = "population"
@@ -31,6 +27,20 @@ removalKeyword = "removal"
 additionKeyword = "addition"
 networkKeyword = "network"
 keywords = [agentKeyword, variableKeyword, populationKeyword, removalKeyword, networkKeyword] 
+
+eol = try (string "\n\r") <|> string "\n" <?> "expected end of line"
+line = many (noneOf "\n\r") <* eol
+indentedLine = do
+  firstChar <- oneOf " \t"
+  rest <- line
+  return (firstChar : rest)
+
+
+
+
+-- | parses a full Frabjous program from the given string
+parseProgram :: String -> Either ParseError Program
+parseProgram = parse program "unknown"
 
 program :: GenParser Char st Program
 program = do
@@ -47,12 +57,13 @@ dec = do
 
 haskellBlock :: GenParser Char st HaskellString
 haskellBlock = do
-  fstLine <- haskellLine
-  lines <- many (indentedHaskellLine)
+  notFollowedBy (choice (map symbol keywords))
+  fstLine <- line
+  lines <- many (indentedLine)
   return (unlines (fstLine : lines))
 
 
-eol = char '\n'
+
 
 
 
@@ -64,16 +75,9 @@ commaSep1 = Token.commaSep1 lexer
 symbol = Token.symbol lexer
 whiteSpace = Token.whiteSpace lexer
 
-haskellLine = do 
-  notFollowedBy (choice (map symbol keywords))
-  str <- many (noneOf "\n") 
-  eol
-  return str
 
-indentedHaskellLine = do
-  firstChar <- oneOf " \t"
-  rest <- haskellLine
-  return (firstChar : rest)
+
+
 
 
 agentDec :: GenParser Char st Dec
