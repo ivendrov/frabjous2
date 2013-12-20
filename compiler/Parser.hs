@@ -15,7 +15,7 @@ module Parser (parseProgram) where
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Language (haskellDef)
-import Control.Applicative ((<*))
+import Control.Applicative ((<*), (<$>))
 
 import Syntax
 
@@ -43,24 +43,22 @@ parseProgram :: String -> Either ParseError Program
 parseProgram = parse program "unknown"
 
 program :: GenParser Char st Program
-program = do
-  preamble <- many haskellBlock
-  decs <- many (skipMany space >> dec)
-  return (Program (unlines preamble) decs)
+program = Program <$> many block
 
--- reads a declaration and any trailing whitespace / comments
-dec :: GenParser Char st Dec
-dec = do
-  dec <- choice . map try $ [agentDec, variableDec, populationDec, networkDec]
+-- reads any number of whitespace /comments followed by a Block
+block :: GenParser Char st Block
+block = do
+  whiteSpace
+  dec <- choice . map try $ [agentDec, variableDec, populationDec, networkDec, JustHaskell <$> haskellBlock]
   return dec
 
 
-haskellBlock :: GenParser Char st HaskellString
+haskellBlock :: GenParser Char st HaskellBlock
 haskellBlock = do
   notFollowedBy (choice (map symbol keywords))
   fstLine <- line
   lines <- many (indentedLine)
-  return (unlines (fstLine : lines))
+  return (HaskellBlock (unlines (fstLine : lines)))
 
 
 
@@ -80,7 +78,7 @@ whiteSpace = Token.whiteSpace lexer
 
 
 
-agentDec :: GenParser Char st Dec
+agentDec :: GenParser Char st Block
 agentDec = do 
   symbol agentKeyword
   id <- identifier
@@ -95,7 +93,7 @@ field = do
   whiteSpace
   return (fieldName, cc ++ " " ++ ty)
 
-variableDec :: GenParser Char st Dec
+variableDec :: GenParser Char st Block
 variableDec = do 
   symbol variableKeyword
   id <- identifier
@@ -103,7 +101,7 @@ variableDec = do
   return (VariableDec id code)
 
 
-populationDec :: GenParser Char st Dec
+populationDec :: GenParser Char st Block
 populationDec = do
   symbol populationKeyword
   name <- identifier
@@ -113,7 +111,7 @@ populationDec = do
   a <- optionMaybe additionDec
   return (PopulationDec name agent r a)
 
-removalDec, additionDec :: GenParser Char st HaskellString
+removalDec, additionDec :: GenParser Char st HaskellBlock
 removalDec = do 
   symbol removalKeyword
   symbol "="

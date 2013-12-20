@@ -3,11 +3,8 @@
 -- |
 -- Module      :  Syntax
 -- Copyright   :  (c) University of Saskatchewan 2013
--- License     :  BSD-style 
 -- 
 -- Maintainer  :  ivan.vendrov@usask.ca
--- Stability   :  experimental
--- Portability :  portable
 --
 -- The abstract syntax for the Frabjous programming language,
 -- with some non-compiler-specific utility functions
@@ -19,40 +16,41 @@ import Data.Function (on)
 
 
 type Name = String
-type HaskellString = String
-type Field = (Name, HaskellString)
+-- TODO add position information for debugging to HaskellBlock
+data HaskellBlock = HaskellBlock { contents :: String } deriving (Typeable, Data, Show, Eq, Ord) 
+type Field = (Name, String)
 
-data Program = Program {preamble :: HaskellString,
-                        decs :: [Dec]}
 
-data Dec = AgentDec { agentName :: Name,
+-- a Program is a list of Blocks
+data Program = Program {blocks :: [Block]} deriving Show
+
+-- a Block can be a declaration or just a block of Haskell code
+data Block = AgentDec { agentName :: Name,
                       fields :: [Field]}
          | VariableDec { varName :: Name,
-                         code :: HaskellString}
+                         code :: HaskellBlock}
          | PopulationDec { populationName :: Name,
                            agent :: Name,
-                           removal :: Maybe HaskellString,
-                           addition :: Maybe HaskellString}
+                           removal :: Maybe HaskellBlock,
+                           addition :: Maybe HaskellBlock}
          | NetworkDec { population1 :: (Name, Name),
                         population2 :: Maybe (Name, Name),
-                        networkSpec :: HaskellString }
+                        networkSpec :: HaskellBlock}
+         | JustHaskell HaskellBlock
          
                         
-           deriving (Eq, Typeable, Data)
+           deriving (Eq, Ord, Typeable, Data, Show)
 
 -- custom Ord implementation; the automatically-derived one tiebreaks by name, which I don't currently need
-decType :: Dec -> Int
+decType :: Block -> Int
 decType (AgentDec _ _ ) = 0
 decType (VariableDec _ _) = 1
 decType (PopulationDec _ _ _ _) = 2
 decType (NetworkDec _ _ _) = 3
-
-instance Ord Dec where
-    compare = compare `on` decType
+decType (JustHaskell _) = 4
 
 
-
-name :: Dec -> Name
+name :: Block -> Name
 name (AgentDec n _) = n
 name (VariableDec n _) = n
 name (PopulationDec n _ _ _ ) = n

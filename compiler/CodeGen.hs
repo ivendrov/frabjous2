@@ -21,46 +21,38 @@ import Text.Printf (printf)
 import Syntax
 import qualified Transform
 
+-- | generate code for a Frabjous Block 
+genBlock :: Block -> String
+genBlock block = 
+    case block of 
+      (AgentDec name fields) ->
+          printf "data %s = %s { %s } deriving Typeable\n" 
+                 name 
+                 name 
+                 (intercalate ", " . map (showField) $ fields')
+          where showField (name, str) = printf "_%s %s" name str
+                fields' = fields ++ [("idx" ++ name, ":: Int")]-- add index field
 
-
-
-
-instance Show Dec where
-    show (AgentDec name fields) = 
-        printf "data %s = %s { %s } deriving Typeable\n" 
-               name 
-               name 
-               (intercalate ", " . map (showField) $ fields')
-        where showField (name, str) = printf "_%s %s" name str
-              fields' = fields ++ [("idx" ++ name, ":: Int")]-- add index field
-    show (VariableDec name code) = 
-        printf "%sWire %s" name code
+      (VariableDec name (HaskellBlock code)) ->
+          printf "%sWire %s" name code
                  
-                                                                                                         
-    show (PopulationDec name _ _ _ ) = "Population " ++ name
+      (PopulationDec name _ _ _ ) -> "Population " ++ name
+      (JustHaskell (HaskellBlock contents)) -> contents
 
 
-
-----------------------
-----------------------
------- GENERATOR
-----------------------
-----------------------
 
 
 generateCode :: Program -> String
-generateCode (Program preamble decs) = 
+generateCode (Program blocks) = 
     let mkLabelsStr = printf "mkLabels [ %s ]\n" (intercalate ", " (map ("''"++) agentNames)) 
-        groupedDecs = groupBy ((==) `on` decType) (sort decs)
-        agentDecs = groupedDecs !! 0
-        variableDecs = groupedDecs !! 1
-        populationDecs = groupedDecs !! 2
-        networkDecs = if (length groupedDecs >= 3) then groupedDecs !! 3 else []
+        agentDecs = filter ( (==0) . decType ) blocks
+        variableDecs = filter ( (==1) . decType ) blocks
+        populationDecs = filter ( (==2) . decType ) blocks
+        networkDecs = filter ( (==3) . decType ) blocks
         agentNames = map (name) agentDecs
-    in unlines [preamble, 
-                concatMap show agentDecs, 
+    in unlines [concatMap genBlock agentDecs, 
                 mkLabelsStr,  
-                unlines . map (show) $ variableDecs,
+                unlines . map (genBlock) $ variableDecs,
                 showAgentInstances agentDecs variableDecs,
                 showModelDecs populationDecs,
                 showInitialState populationDecs,
@@ -79,7 +71,7 @@ generateCode (Program preamble decs) =
 -- showAgentInstances prints instance declarations for every agent,
 -- including the code for the agent's local change wire
 -- precondition agentDecs composed of agents, variableDecs composed of variables
-showAgentInstances :: [Dec] -> [Dec] -> String
+showAgentInstances :: [Block] -> [Block] -> String
 showAgentInstances agentDecs variableDecs = 
     concatMap agentInstance agentDecs where
         agentInstance agent = 
@@ -106,13 +98,13 @@ showAgentInstances agentDecs variableDecs =
                        fieldAssignments = intercalate ", " . map (showField) $ varNames
                        showField var = printf "_%s = %sNew" var var
                        newWireNames = map (++"'") wireNames
-        fieldNames :: Dec -> [Name]
+        fieldNames :: Block -> [Name]
         fieldNames (AgentDec _ fields) = map (fst) fields
         allVarNames = map name variableDecs
 
 -- showModelDecs prints declarations for ModelState and ModelOutput
 -- currently just contains the population; later will contain global reactive variables also
-showModelDecs :: [Dec] -> String
+showModelDecs :: [Block] -> String
 showModelDecs populationDecs = 
     let populationNames = map (name) populationDecs
         agentNames = map (\ (PopulationDec _ a _ _) -> a) populationDecs
@@ -130,7 +122,7 @@ showModelDecs populationDecs =
 
 -- showInitialState prints the initial model state, using all the populations' specified
 -- removal and addition dynamics
-showInitialState :: [Dec] -> String
+showInitialState :: [Block] -> String
 showInitialState populationDecs = 
     printf "initialModelState :: ModelOutput -> ModelState\n\
            \initialModelState initialOutput =\n\
@@ -138,14 +130,14 @@ showInitialState populationDecs =
            (intercalate " " $  map (showState) populationDecs)
            whereDecs 
         where whereDecs = intercalate " ; " $ map showWires populationDecs
-              showWires :: Dec -> String
+              showWires :: Block -> String
               showWires (PopulationDec name agent removal addition) = 
-                  let removeDec = printf "%sRemove = %s\n" name (fromMaybe "never" removal)
-                      addDec = printf "%sAdd = %s\n" name (fromMaybe "never" addition)
+                  let removeDec = printf "%sRemove = %s\n" name (fromMaybe "never" (fmap contents removal))
+                      addDec = printf "%sAdd = %s\n" name (fromMaybe "never" (fmap contents addition))
                   in case (Transform.linearizeDecl removeDec, Transform.linearizeDecl addDec) of 
                        (Just remove, Just add) -> remove ++ " ; " ++ add
                        _ -> error "could not parse removal / addition wires"
-              showState :: Dec -> String
+              showState :: Block -> String
               showState (PopulationDec name agent removal addition) = 
                    printf "(evolvePopulation (PopulationState (%s) %sRemove %sAdd))" 
                               (wiresDec :: String)
@@ -155,7 +147,7 @@ showInitialState populationDecs =
                                  (printf "replicate (length (get %s initialOutput)) localChangeWire" name)
                    
 -- prints the model evolution wire (handles side effects such as death and network change)                     
-showModelEvolution :: [Dec] -> [Dec] -> String
+showModelEvolution :: [Block] -> [Block] -> String
 showModelEvolution populationDecs networkDecs = 
     printf "evolveModel :: ModelState -> WireP ModelOutput ModelOutput\n\
            \evolveModel mstate =\n\
@@ -190,7 +182,7 @@ showModelEvolution populationDecs networkDecs =
               output = printf "output = %s $ ModelOutput %s where{ %s }\n" updateNetworks newPops networkWheres
               updateNetworks, newPops, networkWheres :: String
               updateNetworks = intercalate " . " (zipWith modifyNetwork networkDecs [0..]) where 
-                  modifyNetwork :: Dec -> Int -> String
+                  modifyNetwork :: Block -> Int -> String
                   modifyNetwork (NetworkDec (n1,l1) Nothing _) n = 
                       printf "modify %s (computeNetworkSelf %s network%d)" n1 l1 n
                   modifyNetwork (NetworkDec (n1,l1) (Just (n2,l2)) _) n = 
@@ -198,8 +190,8 @@ showModelEvolution populationDecs networkDecs =
                              n1 n2 l1 l2 n    
               newPops = intercalate " " . map (++"New") $ popNames
               networkWheres = intercalate "; " $ zipWith networkWhere networkDecs [0..] where
-                  networkWhere :: Dec -> Int -> String
-                  networkWhere (NetworkDec _ _ code) n =
+                  networkWhere :: Block -> Int -> String
+                  networkWhere (NetworkDec _ _ (HaskellBlock code)) n =
                       case Transform.linearizeDecl (printf "network%d = %s" n code) of 
                         Just result -> result
                         Nothing -> error "could not parse network declaration"

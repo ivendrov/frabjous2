@@ -9,6 +9,7 @@
 ------------------------------------------------------------------------------
 
 -- Frabjous imports
+import Debug.Trace
 import Syntax
 import qualified Parser
 import qualified CodeGen
