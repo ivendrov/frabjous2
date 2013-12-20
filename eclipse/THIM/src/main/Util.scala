@@ -1,4 +1,4 @@
-package main
+package src.main
 
 import scala.collection.GenTraversableOnce
 import scala.util.Random

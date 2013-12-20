@@ -1,4 +1,4 @@
-package main
+package src.main
 
 import scala.util.Random
 import scala.collection.mutable.ArraySeq
@@ -7,97 +7,94 @@ import Util._
 import scala.math
 import scala.language.postfixOps
 import scala.language.implicitConversions
+import scala.collection.mutable.HashSet
 
-class Model(val startingSims: Int, val numNbhd: Int) {
+class Model(val startingSims: Int, val numNbhd: Int, val nbhdCapacity : Int) {
     import Model.Age, Model.Income, Model.Education, Model.Health
 
-    var nbhds = Vector.fill(numNbhd)(new Neighborhood())
-    var sims = Vector.fill(startingSims)(new Sim(None, Model.EB0, randomElement(nbhds)))
+    
+    val eventQueue : EventQueue[ModelEvent] = new EventQueue() // TODO init properly
+    
+    // global data structures
+    val nbhds = Vector.fill(numNbhd)(new Neighborhood())
+    val sims = HashSet(Seq.fill(startingSims)(new Sim(None, Model.EB0, randomElement(nbhds))) : _*) // TODO init properly
+    
+    // global statistics
+    var avgIncome : Income = 0 
+    var avgHealth : Health = 0 
+    var avgNbhdIncomes : Map[Neighborhood, Income] = Map.empty
+    def avgIncomeNearAge(age: Age): Income = { // TODO make more efficient
+        def isInAgeGroup(sim: Sim) = Math.abs(age - sim.age) < Model.AGE_GROUP_SIZE
+        return sims filter (isInAgeGroup) map (_.income) average
+    }
+    
+    /**
+     * processes the next event in the event queue; TODO return information for statistic collection?
+     */
+    def processNextEvent(){
+        eventQueue.nextEvent() match {
+            case Birth(parent) => {
+                val child = Sim.generateChild(parent,
+                              	  			  Model.computeEducation(parent.income,
+                              	  					  				 parent.nbhd.avgIncome,
+                              	  					  				 avgIncome))
+                sims.add(child)
+                eventQueue.addEvent(Birthday(child), 1.0);
+            }
+            case Birthday(sim) => {
+                // 1. increment age
+                sim.incrAge()
+                
+                // 2. generate income if newly educated
+                if (sim.justDoneEducation) 
+                    sim.baseIncome = Model.startingIncomeBase(avgIncome,
+                                                      		  sim.nbhd.avgIncome,
+                                                      		  sim)
+                                                      		  
+                // 3. update real income
+                if (sim.doneEducation)
+                    sim.income = Model.computeAnnualIncome(sim)
+                
+                // 4. update health
+                sim.health = Model.computeHealth(avgIncomeNearAge(sim.age), sim)
+                
+                // 5. mortality calculation
+                if (randTrue(Model.deathProbability(avgHealth, avgIncome, sim)))
+                    eventQueue.addEvent(Death(sim), 0.0)
+                else {                    
+	                // 6. birth calculation
+	                if (Model.fertile(sim) && randTrue(Model.BIRTH_PROBABILITY))
+	                    eventQueue.addEvent(Birth(sim), Distribution.uniform(0,1).draw())
+	                    
+	                // 7. movement calculation
+	                if (sim.doneEducation && randTrue(Model.moveEffort(sim.nbhd.avgIncome, sim))){
+	                    eventQueue.addEvent(Movement(sim), 0.0)
+	                }
+                }
 
-    def nextState() {
-        /*
-         * COMPUTE STATISTICS
-         */
-        val avgNbhdIncomes =
-            sims groupBy (_.nbhd) mapValues (_ map (_.income) average)
-
-        val avgIncome = sims.map(_.income).average
-        val avgHealth = sims map (_.health) average // n.b. periods between object and methods are optional
-
-        def avgIncomeNearAge(age: Age): Income = {
-            def isInAgeGroup(sim: Sim) = Math.abs(age - sim.age) < Model.AGE_GROUP_SIZE
-
-            return sims filter (isInAgeGroup) map (_.income) average
+            }
+            case Death(sim) => {
+                sims.remove(sim)
+                // TODO remove yourself from children, parents, network etc
+            }
+            case Movement(sim) => {
+                val bestNbhd = nbhds.minBy(nbhd => math.abs(nbhd.avgIncome - sim.income))
+                if (bestNbhd.hasSpace){
+                    // perform movement
+                    sim.nbhd = bestNbhd
+                    sim.livesAtHome = false
+                    // TODO move dependent children (how? need to keep track of children, or else 
+                    // don't let dependents actually have their own neighborhood
+                }
+            }
+            case ComputeStatistics() => {
+            	avgNbhdIncomes =
+            			sims groupBy (_.nbhd) mapValues (_ map (_.income) average)
+            	avgIncome = sims.map(_.income).average
+            	avgHealth = sims map (_.health) average // n.b. periods between object and methods are optional
+            }
         }
-
-        /*
-         * PERFORM AGENT-INTERNAL UPDATES
-         */
-        // age everyone by a year
-        sims.foreach(_.incrAge())
-
-        // generate incomes for newly educated sims
-        sims filter (_.justDoneEducation) foreach (sim =>
-            sim.baseIncome = Model.startingIncomeBase(avgIncome,
-                                                      avgNbhdIncomes(sim.nbhd),
-                                                      sim))
-
-        // update real income
-        sims filter (_.doneEducation) foreach (sim =>
-            sim.income = Model.computeAnnualIncome(sim))
-
-        // update health 
-        sims.foreach(sim =>
-            sim.health = Model.computeHealth(avgIncomeNearAge(sim.age), sim))
-
-        /*
-         *  MORTALITY
-         */
-        val (deadsims, survivors) = sims partition (sim =>
-            randTrue(Model.deathProbability(avgHealth, avgIncome, sim)))
-
-        // remove dead parents of children    
-        survivors filter (sim => deadsims.contains(sim.parent)) foreach (sim =>
-            sim.parent = None)
-
-        /*
-         * BIRTH
-         */
-        // helper function - generates child for a given parent
-        def genChild(parent: Sim) =
-            Sim.generateChild(parent,
-                              Model.computeEducation(parent.income,
-                                                     avgNbhdIncomes(parent.nbhd),
-                                                     avgIncome))
-
-        val newborns = survivors filter
-            Model.fertile filter
-            (_ => randTrue(Model.BIRTH_PROBABILITY)) map
-            genChild
-
-        sims = survivors ++ newborns
-
-        /*
-         * MOBILITY
-         */
-        val attemptedMoves = sims filter
-            (_.doneEducation) filter
-            (sim => randTrue(Model.moveEffort(avgNbhdIncomes(sim.nbhd), sim)))
-
-        def incomeDifference(sim: Sim)(pair: (Neighborhood, Income)) =
-            math.abs(sim.income - pair._2)
-
-        def bestNbhd(sim: Sim) = avgNbhdIncomes.minBy(incomeDifference(sim))._1
-
-        // for now, assume all move attempts succeeded (ignore capacities)
-        for (sim <- attemptedMoves) {
-            sim.nbhd = bestNbhd(sim);
-            sim.livesAtHome = false;
-        }
-
-        // move dependent children along with their parents
-        sims filter (_.livesAtHome) filter (_.parent.nonEmpty) foreach (child =>
-            child.nbhd = child.parent.get.nbhd)
+        
     }
 }
 
@@ -188,16 +185,5 @@ object Model extends App {
         if (fractionAway <= Ymin) 0
         else if (fractionAway >= Ymax) 1
         else (fractionAway - Ymin) / (Ymax - Ymin)
-    }
-
-    // runs model for 100 iterations with user-specified number of sims and iterations
-    override def main(args: Array[String]) {
-        val numSims = Integer.parseInt(args(1))
-        val numIterations = Integer.parseInt(args(0))
-
-        val model = new Model(numSims, 50)
-
-        for (x <- 0 to numIterations)
-            model.nextState()
     }
 }

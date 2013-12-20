@@ -1,5 +1,5 @@
-package main
-import Model._
+package src.main
+import Model.Education, Model.Health, Model.Income, Model.Age
 class Sim
 	(var parent: Option[Sim], // could potentially not have a living parent		          
     val education: Education,

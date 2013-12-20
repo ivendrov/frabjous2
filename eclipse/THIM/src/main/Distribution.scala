@@ -1,4 +1,4 @@
-package main
+package src.main
 
 import scala.util.Random
 
@@ -8,10 +8,16 @@ class Distribution[A](private val transform: Random => A) {
 }
 
 object Distribution {
-
+	
     private def tnormal(mean: Double, sdev: Double)(gen: Random) =
         Random.nextGaussian * sdev + mean
 
+    def uniform(lo : Double, hi: Double): Distribution[Double] = {
+        def tuniform(gen: Random) = 
+            gen.nextDouble * (hi - lo) + lo
+        new Distribution(tuniform)
+    }
+    
     def normal(mean: Double, sdev: Double): Distribution[Double] =
         new Distribution(tnormal(mean, sdev))
 
