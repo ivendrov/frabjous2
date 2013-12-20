@@ -16,13 +16,12 @@ class Model(val startingSims: Int, val numNbhd: Int, val nbhdCapacity : Int) {
     val eventQueue : EventQueue[ModelEvent] = new EventQueue() // TODO init properly
     
     // global data structures
-    val nbhds = Vector.fill(numNbhd)(new Neighborhood())
+    val nbhds = Vector.fill(numNbhd)(new Neighborhood(nbhdCapacity))
     val sims = HashSet(Seq.fill(startingSims)(new Sim(None, Model.EB0, randomElement(nbhds))) : _*) // TODO init properly
     
     // global statistics
     var avgIncome : Income = 0 
     var avgHealth : Health = 0 
-    var avgNbhdIncomes : Map[Neighborhood, Income] = Map.empty
     def avgIncomeNearAge(age: Age): Income = { // TODO make more efficient
         def isInAgeGroup(sim: Sim) = Math.abs(age - sim.age) < Model.AGE_GROUP_SIZE
         return sims filter (isInAgeGroup) map (_.income) average
@@ -39,6 +38,8 @@ class Model(val startingSims: Int, val numNbhd: Int, val nbhdCapacity : Int) {
                               	  					  				 parent.nbhd.avgIncome,
                               	  					  				 avgIncome))
                 sims.add(child)
+                parent.children.add(child)
+                child.nbhd.residents.add(child) // TODO  this is ugly
                 eventQueue.addEvent(Birthday(child), 1.0);
             }
             case Birthday(sim) => {
@@ -75,21 +76,27 @@ class Model(val startingSims: Int, val numNbhd: Int, val nbhdCapacity : Int) {
             }
             case Death(sim) => {
                 sims.remove(sim)
-                // TODO remove yourself from children, parents, network etc
+                // remove parent from any children
+                sim.children.foreach(_.parent = None)
+                // remove child of any living parent
+                sim.parent.foreach(_.children.remove(sim))
+                // remove from neighborhood
+                sim.nbhd.residents.remove(sim) 
             }
             case Movement(sim) => {
                 val bestNbhd = nbhds.minBy(nbhd => math.abs(nbhd.avgIncome - sim.income))
                 if (bestNbhd.hasSpace){
-                    // perform movement
-                    sim.nbhd = bestNbhd
-                    sim.livesAtHome = false
-                    // TODO move dependent children (how? need to keep track of children, or else 
-                    // don't let dependents actually have their own neighborhood
+                    def moveTo(nbhd: Neighborhood)(sim:Sim){
+                        // add sim
+                        sim.nbhd = nbhd
+                        nbhd.residents.add(sim)
+                        // recursively add dependent children
+                        sim.children filter (_.livesAtHome) foreach moveTo(nbhd)
+                    }
+                    moveTo(bestNbhd)(sim)
                 }
             }
             case ComputeStatistics() => {
-            	avgNbhdIncomes =
-            			sims groupBy (_.nbhd) mapValues (_ map (_.income) average)
             	avgIncome = sims.map(_.income).average
             	avgHealth = sims map (_.health) average // n.b. periods between object and methods are optional
             }

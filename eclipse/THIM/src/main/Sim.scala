@@ -1,9 +1,14 @@
 package src.main
-import Model.Education, Model.Health, Model.Income, Model.Age
+import Model.Education
+import Model.Health,
+Model.Income,
+Model.Age
+import scala.collection.mutable.HashSet
 class Sim
-	(var parent: Option[Sim], // could potentially not have a living parent		          
+	(var parent: Option[Sim], // could potentially not have a living parent	
     val education: Education,
     var nbhd: Neighborhood,
+    val children: HashSet[Sim] = HashSet(),
     var age: Age = 0,
     var baseIncome: Income = 0,
     var income: Income = 0,
