@@ -16,6 +16,7 @@ import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Language (haskellDef)
 import Control.Applicative ((<*), (<$>))
+import Data.Maybe (maybe)
 
 import Syntax
 
@@ -107,8 +108,8 @@ populationDec = do
   name <- identifier
   symbol "of"
   agent <- identifier
-  r <- optionMaybe removalDec
-  a <- optionMaybe additionDec
+  r <- try removalDec <|> return (HaskellBlock "never")
+  a <- try additionDec <|> return (HaskellBlock "never")
   return (PopulationDec name agent r a)
 
 removalDec, additionDec :: GenParser Char st HaskellBlock

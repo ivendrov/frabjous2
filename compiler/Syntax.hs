@@ -31,8 +31,8 @@ data Block = AgentDec { agentName :: Name,
                          code :: HaskellBlock}
          | PopulationDec { populationName :: Name,
                            agent :: Name,
-                           removal :: Maybe HaskellBlock,
-                           addition :: Maybe HaskellBlock}
+                           removal :: HaskellBlock,
+                           addition :: HaskellBlock}
          | NetworkDec { population1 :: (Name, Name),
                         population2 :: Maybe (Name, Name),
                         networkSpec :: HaskellBlock}
@@ -40,17 +40,3 @@ data Block = AgentDec { agentName :: Name,
          
                         
            deriving (Eq, Ord, Typeable, Data, Show)
-
--- custom Ord implementation; the automatically-derived one tiebreaks by name, which I don't currently need
-decType :: Block -> Int
-decType (AgentDec _ _ ) = 0
-decType (VariableDec _ _) = 1
-decType (PopulationDec _ _ _ _) = 2
-decType (NetworkDec _ _ _) = 3
-decType (JustHaskell _) = 4
-
-
-name :: Block -> Name
-name (AgentDec n _) = n
-name (VariableDec n _) = n
-name (PopulationDec n _ _ _ ) = n

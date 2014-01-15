@@ -6,7 +6,8 @@
 -- Maintainer  :  ivan.vendrov@usask.ca
 --
 -- A library of transformations on Haskell source code for use
--- in the Frabjous compiler.
+-- in the Frabjous compiler. This is the only module in the compiler
+-- that depends on a particular abstract syntax for Haskell
 ------------------------------------------------------------------------------
 module Transform (linearizeDecl) where
 
