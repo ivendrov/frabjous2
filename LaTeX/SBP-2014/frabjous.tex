@@ -78,13 +78,13 @@ functional reactive, functional programming, simulation, dynamic model, domain-s
 
 For systems that evolve continuously in space and time, the language of differential equations---honed by centuries of application to the physical sciences---has no substitute. Its syntax is extremely terse, with precise mathematical semantics that permit sophisticated analysis. 
 
-There are, however, a number of processes that are difficult to express with differential equations, such as those involving networks, history dependence, or heterogenous populations\cite{network_structure,system_dyn_tradeoffs}. The need to model these processes is addressed by agent-based modeling (ABM), a more general approach which involves specifying the behavior of each individual and allowing the global dynamics to emerge from their interactions.
+There are, however, a number of processes that are difficult to express with differential equations, such as those involving networks, history dependence, or heterogenous populations\cite{network_structure,system_dyn_tradeoffs}. The need to model these processes is addressed by agent-based modeling (ABM), a more general approach which involves specifying the behavior of individuals and allowing the global dynamics to emerge from their interactions.
   
   This generality comes with a number of costs. With existing tools and frameworks, agent-based models are significantly harder to create, extend, and understand; and significantly more expensive to calibrate and run relative to models based on systems of differential equations \cite{system_dyn_tradeoffs, ab_vs_de}. 
   
-  Although the increased cognitive and computational costs of agent-based models are to some degree unavoidable due to the models' increased complexity and generality, we argue that these costs have been greatly compounded by the use of imperative languages such as Java and C++ to express model logic. While these languages are well-suited for general-purpose programming, they are poor specification languages, due to their verbosity and hiding of essential details. They force modelers and users to think at a low level of abstraction, and fail to cleanly separate domain-level structure from implementation details such as input/output, the time-stepping mechanism, and the data structures used \cite{system_dyn_tradeoffs}. 
+  Although the increased cognitive and computational costs of agent-based models are to some degree unavoidable due to their increased complexity and generality, we argue that these costs have been greatly compounded by the use of imperative object-oriented languages such as Java and C++ to express model logic. As used in modern ABM frameworks, these languages force modelers and users to think at a low level of abstraction, and fail to cleanly separate domain-level structure from implementation details such as input/output, the time-stepping mechanism, and the data structures used, which obscures the essential model logic \cite{system_dyn_tradeoffs}. 
   
-  On the other hand, the underlying language of ODE models is not imperative but declarative: rather than describing rules by which model variables change, differential equations specify relationships between model variables that hold at all times. We believe that the declarative nature of ODE models accounts for much of their success by simplifying model creation, modification, and analysis. It then stands to reason that ABM could be similarly simplified by basing it on an appropriate declarative language. To support this hypothesis, we develop such a language and demonstrate its benefits on a standard example model.
+  On the other hand, the underlying language of ODE models is not imperative but declarative: rather than describing rules by which model variables change, differential equations specify relationships between model variables that hold at all times. We believe that the declarative nature of ODE models accounts for much of their success by simplifying model creation, modification, and analysis. It then stands to reason that ABM could be similarly simplified by basing it on an appropriate declarative language. To support this hypothesis, we developed Frabjous, a new declarative language for ABM. In this paper, we describe Frabjous and demonstrate its benefits on a standard example model.
   
 \section{Background}
 
@@ -98,14 +98,14 @@ In this section, we briefly describe the existing languages and technologies we 
   
 \subsection{Functional Reactive Programming}
 \label{frp}
-  An apparent weakness of Haskell is the difficulty of representing systems that vary with time, since there is no mechanism for changing state.  As pioneered by Elliott and Hudak, \emph{functional reactive programming} (FRP) is a paradigm that augments functional programming with time-varying values as well as a set of primitive operations on these values \cite{fran}. Arrowized functional reactive programming (AFRP) is a version of FRP that shifts the focus onto functions between time-varying values, called \emph{signal functions}\cite{frpcont}. AFRP allows complex, time-varying, locally stateful systems to be written in a declarative fashion\cite{yampa}. 
+  An apparent weakness of Haskell is the difficulty of representing systems that vary with time, since there is no mechanism for changing state.  As pioneered by Elliott and Hudak, \emph{functional reactive programming} (FRP) is a paradigm that augments functional programming with time-varying values as well as a set of primitive operations on these values \cite{fran}. Arrowized functional reactive programming (AFRP) is a version of FRP that shifts the focus onto functions between time-varying values, called \emph{signal functions}\cite{frpcont}. 
   
-  The simplest AFRP operator is \lstinline{constant}, which defines a constant function with a given value. So the output of the signal function \lstinline{constant 1} is \lstinline{1} at all times, and for all inputs. 
-  Integration can also be viewed as a signal function, since it operates on a function of time and produces a function of time. So
+  The simplest AFRP operator is \lstinline{constant}, which defines a constant signal function. So the output of the signal function \lstinline{constant 1} is \lstinline{1} at all times, and for all inputs. 
+  Integration over time can also be viewed as a signal function, since it operates on a function of time and produces a function of time. So
 \begin{code}
 	integral . constant 1
 \end{code}
-is a signal function that ignores its input and outputs the current time (\lstinline{'.'} is the Haskell function composition operator). 
+is a signal function that ignores its input and outputs the current time (\lstinline{`.'} is the Haskell function composition operator). 
 
   Following the Netwire version of AFRP\cite{netwire}, we allow signal functions to sometimes not produce values. For example, \lstinline{rate} is a signal function that takes a time-varying number and produces a value at a rate specified by that number, so \lstinline{rate . constant 2} produces twice (on average) in a given time unit. This allows us to model, for example, the Poisson process: 
 \begin{code}
@@ -119,13 +119,12 @@ where \lstinline{count} is an operator that counts the number of instants that i
 \end{code}
 is a signal function that produces \lstinline{0} for the first three time units, then \lstinline{1} forever. 
   
-  We use FRP as the basis for our language because its declarative nature provides the transparency, clarity, and concision usually associated with declarative modeling \cite{system_dyn_approaches, system_dyn_tradeoffs}.
-  
+ We base Frabjous on FRP because its declarative nature provides the clarity and concision associated with declarative modeling \cite{system_dyn_approaches, system_dyn_tradeoffs}. The utility of FRP as a specification language for complex systems has been demonstrated in a number of domains, including graphics \cite{fran}, robotics \cite{robots}, and games\cite{yampa}.
 \subsection{Frabjous}
   
-  The generality of FRP comes at a cost, however. Understanding the syntax used in existing FRP libraries such as Netwire or Yampa \cite{yampa} requires familiarity with advanced functional programming concepts such as monads \cite{monads}, arrows \cite{mon2arr}, and applicative functors \cite{applicative}. While these concepts allow for a great deal of conceptual elegance and generality, a domain-specific language that packages those portions relevant to ABM is desirable. 
+  The generality of FRP comes at a cost, however. Understanding the syntax used in existing FRP libraries such as Netwire or Yampa \cite{yampa} requires familiarity with advanced functional programming concepts such as monads \cite{monads} and arrows \cite{mon2arr}. While these concepts allow for a great deal of conceptual elegance and generality, a domain-specific language that packages those portions relevant to ABM is desirable. 
   
-  To explore this, the original version of Frabjous\cite{frabjous} realized concision and clarity compared to the popular AnyLogic framework. However, it placed severe restrictions on agent behavior and network structure. In this paper, we redesign and extend Frabjous to yield a language that is still concise and readable, but is general enough to describe, in principle, any agent-based model.
+  To explore this, the original version of Frabjous\cite{frabjous} realized concision and clarity compared to the popular AnyLogic framework. However, it placed severe restrictions on agent behavior and network structure. In this paper, we completely redesign Frabjous to yield a language that is still concise and readable, but is general enough to describe, in principle, any agent-based model.
   
 \section{The Frabjous Modeling Language}
 
@@ -146,9 +145,9 @@ Time-varying values are not specified in Frabjous directly, but implicitly by me
 which makes explicit the signal functions' dependence on time.
 
 \section{An Extended Example: The SIR Model}
-To illustrate the key features of Frabjous in an example-driven manner, we adapt the classic Susceptible, Infectious, Recovered (SIR) model of the spread of infectious disease to the agent-based domain, then extend it in a number of directions.
+   In this section, we use Frabjous to implement an adaptation of the classic Susceptible, Infectious, Recovered (SIR) model of the spread of infectious disease, then extend it in a number of directions. Our purpose is to give examples of the clarity, concision, and flexibility of Frabjous models, paving the road for a deeper discussion in Section 5.
 
- We view the population as a collection of people, each with an attribute that denotes the person's infection state. In Frabjous we declare this as follows: 
+ Our basic agent type is called \lstinline{Person}, with an attribute for the agent's current infection state. In Frabjous we declare this as follows: 
 \begin{code}
 	data State = Susceptible | Infectious | Recovered 
 	agent Person { infectionState :: State} 
@@ -262,9 +261,7 @@ Modeling is typically undertaken for the purpose of discovery, which means that 
 \section{Future Work}
 The primary area for future work is to make Frabjous a more complete framework, with the normal features and conveniences modelers expect, including support for collection of statistics over agent populations, parameter calibration and sensitivity analysis, and graphical visualization of model outputs.
 
-In parallel, the Frabjous standard library needs to be refined and extended to cover a wider variety of agent behaviors and network types. 
-
-Expanding Frabjous in these directions will make it a useful language, at least for the purposes of pedagogy and communication; it will also pave the way for a direct quantitative and qualitative comparison to existing ABM frameworks.
+ This will make it Frabjous a useful language, at least for the purposes of pedagogy and communication; it will also pave the way for a direct quantitative and qualitative comparison to existing ABM frameworks.
 
 To make Frabjous an industrial-strength ABM framework, performance issues must also be addressed. The declarative nature of the language provides many opportunities for optimization and parallelization. In particular, we are exploring the possibility of leveraging Data Parallel Haskell\cite{dphaskell} as well as GPU acceleration\cite{accelerate} to speed up the execution of Frabjous models. 
    
