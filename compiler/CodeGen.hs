@@ -16,6 +16,7 @@ import Data.Maybe (mapMaybe, fromMaybe, fromJust)
 import Data.List
 import Data.Function (on)
 import Text.Printf (printf)
+import Data.Char (toUpper)
 
 import qualified Syntax
 import Analyzer
@@ -23,12 +24,15 @@ import qualified Transform
 
 
 generateCode :: FrabjousModel -> String
-generateCode (FrabjousModel agents attributes populations networks othercode) = 
+generateCode (FrabjousModel agents attributes localAttributeNames globals populations networks othercode) = 
     let mkLabelsStr = printf "mkLabels [ %s ]\n" (intercalate ", " (map ("''"++) agentNames)) 
         agentNames = map (name) agents
+        capitalize [] = []
+        capitalize (h : t) = toUpper h : t
     in unlines [othercode,
                 concatMap showAgentDeclaration agents, 
                 mkLabelsStr,  
+                concatMap (\n -> printf "get%s = get %s\n" (capitalize n) n) localAttributeNames,
                 unlines . map showAttribute $ attributes,
                 concatMap showAgentInstance agents,
                 showModelDecs populations,
