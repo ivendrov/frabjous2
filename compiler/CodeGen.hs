@@ -51,7 +51,7 @@ showAgentDeclaration (Agent name attributes _) =
                 attributes' = attributes ++ [("idx" ++ name, ":: Int")]-- add index attribute
     
 showAttribute :: Attribute -> String
-showAttribute (Attribute name (Syntax.HaskellBlock code)) = printf "%sWire %s" name code
+showAttribute (Attribute name (Syntax.HaskellBlock code)) = printf "%sWire = %s" name code
 
 
     

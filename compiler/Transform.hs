@@ -15,8 +15,7 @@ import qualified Language.Haskell.Exts.Parser as Haskell -- needing for working 
 import qualified Language.Haskell.Exts.Pretty as Haskell -- needed for working with haskell source code
 import qualified Language.Haskell.Exts.Syntax as Haskell
 
-ppOneLine = Haskell.prettyPrintWithMode oneLineMode where
-    oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
+
 
 
 -- | converts a haskell declaration to an equivalent one-line declaration 
@@ -24,8 +23,13 @@ ppOneLine = Haskell.prettyPrintWithMode oneLineMode where
 linearizeDecl :: String -> Maybe String
 linearizeDecl = (fmap ppOneLine . readDecl) where
 
+ppOneLine = Haskell.prettyPrintWithMode oneLineMode where
+    oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
+
 
 readDecl:: String -> Maybe Haskell.Decl
 readDecl str = case Haskell.parseDecl str of 
              Haskell.ParseOk decl -> Just decl
              _ -> Nothing
+
+
