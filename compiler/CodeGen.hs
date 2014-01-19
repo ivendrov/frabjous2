@@ -22,18 +22,21 @@ import qualified Syntax
 import Analyzer
 import qualified Transform
 
+-- capitalizes the first letter of a given attribute
+capitalize [] = []
+capitalize (h : t) = toUpper h : t
+
 
 generateCode :: FrabjousModel -> String
 generateCode (FrabjousModel agents attributes localAttributeNames globals populations networks othercode) = 
     let mkLabelsStr = printf "mkLabels [ %s ]\n" (intercalate ", " (map ("''"++) agentNames)) 
         agentNames = map (name) agents
-        capitalize [] = []
-        capitalize (h : t) = toUpper h : t
+        
     in unlines [othercode,
                 concatMap showAgentDeclaration agents, 
                 mkLabelsStr,  
                 concatMap (\n -> printf "get%s = get %s\n" (capitalize n) n) localAttributeNames,
-                unlines . map showAttribute $ attributes,
+                unlines . map (showAttribute localAttributeNames) $ attributes,
                 concatMap showAgentInstance agents,
                 showModelDecs populations,
                 showInitialState populations,
@@ -49,9 +52,12 @@ showAgentDeclaration (Agent name attributes _) =
                  (intercalate ", " . map (showAttr) $ attributes')
           where showAttr (name, str) = printf "_%s %s" name str
                 attributes' = attributes ++ [("idx" ++ name, ":: Int")]-- add index attribute
-    
-showAttribute :: Attribute -> String
-showAttribute (Attribute name (Syntax.HaskellBlock code)) = printf "%sWire = %s" name code
+      
+
+showAttribute :: [String] -> Attribute -> String
+showAttribute attributeNames (Attribute name (Syntax.HaskellBlock code)) = 
+    printf "%sWire = \n let {%s} \n in %s " name (intercalate ";" (map showBinding attributeNames)) code  where
+        showBinding name = printf "%s = function (get%s)" name (capitalize name)
 
 
     

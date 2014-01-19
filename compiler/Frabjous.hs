@@ -35,6 +35,8 @@ import Control.Wire.Classes
 -- A. Utility --
 ----------------
 type AdjList = Vector (Vector Int)
+function :: (a -> b) -> Wire e Identity a b -- TODO change to randomness / logging monad
+function = arr
 
 --  0) Label generator (used for networks)
 pairLabel (l1,l2) = point $ 
@@ -107,13 +109,14 @@ rSwitch computeWire initialState = helper' initialState (computeWire initialStat
                             (if (newState == state) then currentWire' else computeWire newState))
 
 
--- statechart :: (a :-> b) -> Wire a b -> Wire a b
--- statechart label transitions is a wire whose internal state will be the most recent
+-- statechart :: Wire a b -> Wire a b -> Wire a b
+-- statechart start transitions is a wire whose internal state will be the most recent
 -- value produced by transitions; and which is refreshed every time its internal state changes
-statechart label transitions = 
-    mkGen $ \dt x -> 
-        stepWire (rSwitch computeWire (get label x)) dt x where
-            computeWire state = transitions state <|> pure state
+statechart start transitions = 
+    mkGen $ \dt x -> do 
+      (Right init, _) <- stepWire start dt x
+      stepWire (rSwitch computeWire init) dt x where
+                     computeWire state = transitions state <|> pure state
    
 
 

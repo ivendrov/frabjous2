@@ -26,7 +26,7 @@ reactive state = statechart state transitions
                      R -> pure S . after 3
 
 
-reactive income(t) = (arr (get income))(t) * 3
+reactive income(t) = income(t) * 3
 
 
 agent Nbhd { avgIncome :: Double,
