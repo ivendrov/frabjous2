@@ -1,10 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>CurrentWorkingDirectory</key>
-	<string>/Users/oli/Documents/Research/2009summer/haskell/yampa</string>
-	<key>WorksheetContents</key>
-	<string>make frabtestghc --make frabTest.hs frabjous.hs -o frab[1 of 2] Compiling Frabjous         ( frabjous.hs, frabjous.o )Linking frab ...'/usr/local/wxhaskell/bin/macosx-app' frabopen frab.app</string>
-</dict>
-</plist>
