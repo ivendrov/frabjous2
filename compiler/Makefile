@@ -1,8 +1,8 @@
 
 all : model
 
-compiler: Compiler.hs Syntax.hs Parser.hs CodeGen.hs Transform.hs
-	ghc Compiler Syntax Parser CodeGen Transform
+compiler: Compiler.hs Syntax.hs Parser.hs Analyzer.hs CodeGen.hs Transform.hs
+	ghc Compiler Syntax Parser Analyzer CodeGen Transform
 
 model: compiler top bottom thim.fj
 	./Compiler < thim.fj > middle
@@ -14,4 +14,4 @@ output: compiler model
 	diff output1 output2
 
 clean:
-	rm -rf *o *.hi *~ Compiler Syntax Parser CodeGen Transform  model.hs model middle output2
+	rm -rf *o *.hi *~ Compiler Syntax Parser Analyzer CodeGen Transform  model.hs model middle output2

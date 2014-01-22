@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 
 module Frabjous -- TODO only export what needs to be exported
 where
@@ -11,10 +12,10 @@ where
 import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, 
                        (.), id, unzip, all, any, zipWith3, (++), sum)
 import Control.Monad hiding (when)
+import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
 import Control.Arrow
-import Control.Wire
-import System.Random (mkStdGen)
+import Control.Wire hiding (getRandom)
 import Text.Printf
 import qualified Data.List as List
 import Data.Vector
@@ -27,7 +28,6 @@ import Data.Tuple (swap)
 import Data.Label
 import Data.Typeable
 
-import Control.Wire.Classes
 
 -- FRABJOUS STANDARD LIBRARY
 
@@ -35,6 +35,8 @@ import Control.Wire.Classes
 -- A. Utility --
 ----------------
 type AdjList = Vector (Vector Int)
+function :: (RandomGen g) => (a -> b) -> Wire e (Rand g) a b -- TODO change to randomness / logging monad
+function = arr
 
 --  0) Label generator (used for networks)
 pairLabel (l1,l2) = point $ 
@@ -68,6 +70,7 @@ never = Control.Wire.empty
 
 -- rate generates events according to a poisson process with parameter 1/mu
 -- problem : what about multiple occurrences in a single time interval?? 
+{- 
 rate :: (Monoid e, RandomGen g) => Time -> g -> Event e m a
 rate mu g
      | mu <= 0 =  error "mean time cannot be negative"
@@ -77,17 +80,18 @@ rate mu g
         (if (e < 1 - exp (-dt / mu)) then Right x else Left mempty, rate mu g')
   
 rate' mu = rate mu (mkStdGen 3)
+-}
 
 -- a wire that takes as input the rate of infection, and produces a unit value with a rate
 -- corresponding to the given time, minus inaccuracy with multiple occurrences in a 
 -- single time interval
-rateWire ::  (RandomGen g) => g -> WireP Double ()
-rateWire g = mkPure $
-           \dt lambda -> 
-               let (e, g') = random g in
-               (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rateWire g')
+rateWire :: (RandomGen g) => Wire LastException (Rand g) Double ()
+rateWire = mkGen $
+           \dt lambda -> do 
+             e <- getRandom
+             return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rateWire)
 
-rateWire' = rateWire (mkStdGen 3)
+rateWire' = rateWire 
 
 -- rSwitch switches between wires based on the given discriminator function "computeWire"
 -- currently, every time its current wire changes output, it plugs the output into computeWire
@@ -107,13 +111,14 @@ rSwitch computeWire initialState = helper' initialState (computeWire initialStat
                             (if (newState == state) then currentWire' else computeWire newState))
 
 
--- statechart :: (a :-> b) -> Wire a b -> Wire a b
--- statechart label transitions is a wire whose internal state will be the most recent
+-- statechart :: Wire a b -> Wire a b -> Wire a b
+-- statechart start transitions is a wire whose internal state will be the most recent
 -- value produced by transitions; and which is refreshed every time its internal state changes
-statechart label transitions = 
-    mkGen $ \dt x -> 
-        stepWire (rSwitch computeWire (get label x)) dt x where
-            computeWire state = transitions state <|> pure state
+statechart start transitions = 
+    mkGen $ \dt x -> do 
+      (Right init, _) <- stepWire start dt x
+      stepWire (rSwitch computeWire init) dt x where
+                     computeWire state = transitions state <|> pure state
    
 
 
@@ -161,7 +166,7 @@ fclabels [d|
 
 -- evolve the local properties of the population (unrelated to networks)
 -- i.e modify each agent locally, then apply death and birth (UNIMPLEMENTED)
-evolvePopulation :: (Agent a) => PopulationState a -> WireP (Vector a) (PopulationOutput a)
+evolvePopulation :: (Agent a, Monad m) => PopulationState a -> Wire e m (Vector a) (PopulationOutput a)
 evolvePopulation (PopulationState agentWires removal addition) = 
     mkPure $ \dt agents ->
         let (agents', agentWires') = stepWiresP agentWires dt agents

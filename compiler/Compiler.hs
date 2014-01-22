@@ -9,9 +9,11 @@
 ------------------------------------------------------------------------------
 
 -- Frabjous imports
+import Debug.Trace
 import Syntax
 import qualified Parser
 import qualified CodeGen
+import qualified Analyzer
 
 
 
@@ -23,7 +25,7 @@ main = do
 process :: String -> String
 process str = case Parser.parseProgram str of
                 Left err -> show err
-                Right ast -> CodeGen.generateCode ast
+                Right ast -> CodeGen.generateCode (Analyzer.analyze ast)
 
                                  
 
