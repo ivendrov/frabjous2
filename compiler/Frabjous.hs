@@ -68,30 +68,23 @@ never :: (Monad m, Monoid e) => Wire e m a b
 never = Control.Wire.empty
 
 
--- rate generates events according to a poisson process with parameter 1/mu
--- problem : what about multiple occurrences in a single time interval?? 
-{- 
-rate :: (Monoid e, RandomGen g) => Time -> g -> Event e m a
-rate mu g
-     | mu <= 0 =  error "mean time cannot be negative"
-     | otherwise = mkPure $
-       \dt x -> 
-        let (e,g') = random g in
-        (if (e < 1 - exp (-dt / mu)) then Right x else Left mempty, rate mu g')
-  
-rate' mu = rate mu (mkStdGen 3)
--}
 
 -- a wire that takes as input the rate of infection, and produces a unit value with a rate
 -- corresponding to the given time, minus inaccuracy with multiple occurrences in a 
 -- single time interval
-rateWire :: (RandomGen g) => Wire LastException (Rand g) Double ()
-rateWire = mkGen $
+rate :: (RandomGen g) => Wire LastException (Rand g) Double ()
+rate = mkGen $
            \dt lambda -> do 
              e <- getRandom
-             return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rateWire)
+             return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rate)
 
-rateWire' = rateWire 
+
+-- purifyRandom wire gen takes a wire in the Rand monad and an initial generator,
+-- and makes it into a pure wire.
+purifyRandom :: (RandomGen g) => Wire e (Rand g) a b -> g -> Wire e Identity a b
+purifyRandom wire gen = mkPure $ \dt x ->
+                                    let ((output, wire'), gen') = runRand (stepWire wire dt x) gen
+                                    in (output, purifyRandom wire' gen')
 
 -- rSwitch switches between wires based on the given discriminator function "computeWire"
 -- currently, every time its current wire changes output, it plugs the output into computeWire
