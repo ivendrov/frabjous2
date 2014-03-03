@@ -9,12 +9,12 @@
 
 
 import Control.Wire hiding (getRandom)
-import Control.Monad hiding (when)
+import Control.Monad hiding (when, mapM, sequence)
 import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
 
 -- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding ((.), id)
+import Prelude hiding ((.), id, mapM, sequence)
 import Control.Arrow
 import Text.Printf
 import qualified Data.List as List
@@ -23,6 +23,7 @@ import Data.Monoid
 import Data.Graph
 import Data.Label (fclabels, mkLabels, get, set, modify, (:->))
 import Data.Typeable
+import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
 
 
@@ -30,7 +31,7 @@ import StandardLibrary
 import InternalLibrary
 
 
-import Data.Map (Map)
+import Data.Map (Map, (!))
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -43,15 +44,17 @@ data State = S | I | R deriving (Eq, Show)
 
 
 
-data Person = Person { getIncome :: Double, getState :: State} 
-data Nbhd = Nbhd { getAvgIncome :: Double} 
+data Agent = Person { getIncome :: Double, getState :: State} 
+            | Nbhd { getAvgIncome :: Double} 
 
-
-data ModelState = ModelState { peopleState :: PopulationWire ModelOutput Person,
-                               nbhdsState :: PopulationWire ModelOutput Nbhd }
-data ModelOutput = ModelOutput { people :: ReactiveOutput Person, 
-                                 nbhds :: ReactiveOutput Nbhd, 
+data ModelState = ModelState { populationWires :: Map String (PopulationWire ModelOutput Agent)}
+data ModelOutput = ModelOutput { populations :: Map String (ReactiveOutput Agent),
                                  neighboursNetwork :: SymmetricNetwork}
+
+people = (Map.! "people") . populations
+nbhds = (Map.! "nbhds") . populations
+
+popExtractions = Map.fromList[("people", people), ("nbhds", nbhds)]
 
 income = function (getIncome . prevState)
 state = function (getState . prevState)
@@ -75,64 +78,76 @@ avgIncomeWire i = pure 0 -- function (averageIncome . getResidents)
                                   / fromIntegral (length people) 
  
 
-instance Agent Person ModelOutput where 
-    newRandWire id = helper (stateWire id) (incomeWire id) where
+
+personWire g id = purifyRandom (helper (stateWire id) (incomeWire id)) g where
            helper stateWire incomeWire =
               mkGen $ \dt x -> do
                 (Right stateNew, stateWire') <- stepWire stateWire dt x
                 (Right incomeNew, incomeWire') <- stepWire incomeWire dt x
                 return (Right $ (prevState x) {getState = stateNew, getIncome = incomeNew}, helper stateWire' incomeWire')
-instance Agent Nbhd ModelOutput where 
-    newRandWire id = helper (avgIncomeWire id) where
+nbhdWire g id = purifyRandom (helper (avgIncomeWire id)) g where
            helper avgIncomeWire =
               mkGen $ \dt x -> do
                 (Right avgIncomeNew, avgIncomeWire') <- stepWire avgIncomeWire dt x
                 return (Right $ (prevState x) {getAvgIncome = avgIncomeNew}, helper avgIncomeWire')
 
+peopleRemove = never -- TODO try death 
+peopleAdd = never 
+nbhdsRemove = never 
+nbhdsAdd = never
 
 
-initialModelState :: [Person] -> [Nbhd] -> ([Int] -> SymmetricNetwork) -> ModelMonad (ModelState, ModelOutput)
-initialModelState peopleInit nbhdsInit neighboursNetwork= do 
-  let peopleCount = length peopleInit
-      nbhdsCount = length nbhdsInit
-  peopleIndexed <- genNewAgents peopleCount
-  nbhdsIndexed <- genNewAgents nbhdsCount
-  let (peopleIDs, initialPeople) =  unzip peopleIndexed
-      (nbhdIDs, initialNbhds) = unzip nbhdsIndexed
-      peopleState = PopulationState (IntMap.fromList peopleIndexed) peopleRemove peopleAdd
-      nbhdState = PopulationState (IntMap.fromList nbhdsIndexed) nbhdsRemove nbhdsAdd
+mapZipWith :: (Ord k) => (a -> b -> c) -> Map k a -> Map k b -> Map k c
+mapZipWith f map1 map2 = Map.mapWithKey (\k -> f (map1 ! k)) map2
+
+mapZipWith3 :: Ord k => (a -> b -> c -> d) -> Map k a -> Map k b -> Map k c -> Map k d
+mapZipWith3 f map1 map2 map3= Map.mapWithKey (\k -> f (map1 ! k) (map2 ! k)) map3
+
+removalWires = Map.fromList [("people", peopleRemove), ("nbhds", nbhdsRemove)]
+additionWires = Map.fromList [("people", peopleAdd), ("nbhds", nbhdsRemove)]
+
+newAgentWires :: Map String (StdGen -> ID -> AgentWire ModelOutput Agent)
+newAgentWires = Map.fromList [("people", personWire), ("nbhds", nbhdWire)]
+
+
+initialModelState :: Map String [Agent] -> ([Int] -> SymmetricNetwork) -> ModelMonad (ModelState, ModelOutput)
+initialModelState initialPops neighboursNetwork= do 
+  let initialCounts = Map.map length initialPops 
+  indexedPops <- Traversable.sequence (mapZipWith genNewAgents initialCounts newAgentWires)
+  let ids =  Map.map (map fst) indexedPops
+      wires = Map.map (map snd) indexedPops
+      populationStates = mapZipWith3 PopulationState (Map.map IntMap.fromList indexedPops)
+                                                 removalWires
+                                                 additionWires
+      state = ModelState (mapZipWith3 evolvePopulation popExtractions newAgentWires populationStates)
+
+      initialPopulationOutput ids initAgents = ReactiveOutput { collection = IntMap.fromList (zip ids initAgents),
+                                                                removed = IntSet.empty,
+                                                                added = IntSet.empty}
+      indexedInitialPops = mapZipWith initialPopulationOutput ids initialPops
+      initialOutput = ModelOutput {populations = indexedInitialPops,
+                                   neighboursNetwork = neighboursNetwork (ids Map.! "people")}
   return $
-   (ModelState (evolvePopulation people peopleState)
-              (evolvePopulation nbhds nbhdState),
-    ModelOutput {people = ReactiveOutput { collection = IntMap.fromList (zip peopleIDs peopleInit),
-                                           removed = IntSet.empty,
-                                           added = IntSet.empty},
-                 nbhds = ReactiveOutput { collection = IntMap.fromList (zip nbhdIDs nbhdsInit),
-                                          removed = IntSet.empty,
-                                          added = IntSet.empty},
-                 neighboursNetwork = neighboursNetwork peopleIDs
-                 })
- where{ peopleRemove = never; -- TODO try death 
-        peopleAdd = never ; 
-        nbhdsRemove = never ; 
-        nbhdsAdd = never}
+   (state, initialOutput)
 
 evolveModel :: ModelState -> ModelWire ModelOutput ModelOutput
-evolveModel (ModelState peopleState nbhdsState) =
+evolveModel (ModelState populationStates) =
   mkGen $ \dt input -> do
-    (Right peopleOutput, peopleState) <- stepWire peopleState dt input
-    (Right nbhdsOutput, nbhdsState) <- stepWire nbhdsState dt input
-    let output = input { people = peopleOutput, nbhds = nbhdsOutput}  
+    results <- Traversable.mapM (\p -> stepWire p dt input) populationStates
+    let newStates = Map.map snd results
+        fromRight (Right x) = x
+        outputs = Map.map (fromRight . fst) results
+        output = input { populations = outputs}  
      -- now update networks to handle birth and death, and THEN run the network evolution wires
      -- output = modify (pairLabel (people, nbhds)) (computeNetwork (nbhd, residents) network0) $ ModelOutput peopleNew nbhdsNew where{ network0 = evenlyDistribute }
-    return (Right output, evolveModel (ModelState peopleState nbhdsState))
+    return (Right output, evolveModel (ModelState newStates))
 
 
 -- END GENERATED CODE
 
 model :: WireP () ModelOutput
 model = let initPair = (mkStdGen 4, 0)
-            initialization = initialModelState startingPeople startingNbhds startingNetwork
+            initialization = initialModelState startingPopulations startingNetwork
             ((state,output), afterPair) = runModel initialization initPair
             pureModelWire = purifyModel (evolveModel state) afterPair
          in loopWire output pureModelWire
@@ -185,7 +200,7 @@ main = do
 -- 6. Run Configuration
 
 -- STARTING STATE
-
+startingPopulations = Map.fromList [("people", startingPeople), ("nbhds", startingNbhds)]
 
 startingPeople = zipWith Person
                  startingIncomes

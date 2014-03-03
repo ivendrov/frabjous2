@@ -46,6 +46,8 @@ import Data.Label
 import Data.Typeable
 import Data.Either (partitionEithers)
 
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
@@ -99,11 +101,6 @@ data AgentInput model a = AgentInput {modelState :: model,
 
 type AgentWire model a = WireP (AgentInput model a) a
 type ID = Int -- agent ID
-class Agent a model where
-    -- | Create a new agent wire with the given random seed and agent identifier
-    newAgentWire :: (RandomGen g) => g -> ID -> AgentWire model a
-    newAgentWire g id = purifyRandom (newRandWire id) g
-    newRandWire :: (RandomGen g) => ID -> Wire LastException (Rand g) (AgentInput model a) a
 
 
 type Collection a = IntMap a
@@ -131,14 +128,14 @@ removeSet map set = foldr IntMap.delete map (IntSet.toList set)
 
 
 -- | generate a new agent with a new ID and random seed
-genNewAgent :: (Agent a input, RandomGen g) => RandT g (State ID) (ID, AgentWire input a)
-genNewAgent = do 
+genNewAgent :: RandomGen g => (g -> ID -> AgentWire input a) -> RandT g (State ID) (ID, AgentWire input a)
+genNewAgent f = do 
   i <- State.get
   State.modify (+1)
   g <- getSplit
-  return (i, newAgentWire g i)
+  return (i, f g i)
 
-genNewAgents n = replicateM n genNewAgent
+genNewAgents n f = replicateM n (genNewAgent f)
 
 type ModelMonad  = RandT StdGen (State ID)
 
@@ -162,44 +159,36 @@ type PopulationWire model a  =
 
 -- evolve the local properties of the population (unrelated to networks)
 -- i.e modify each agent locally, then apply death and birth 
-evolvePopulation :: Agent a model => 
-                     (model -> ReactiveOutput a) -> 
+evolvePopulation :: (model -> ReactiveOutput a) ->
+                     (StdGen -> ID -> AgentWire model a) ->
                      PopulationState model a ->
                         PopulationWire model a 
-evolvePopulation extractPop (PopulationState agentWires removal addition) = 
-    mkGen $ \dt modelStateP -> do
-      let prevAgents = collection . extractPop $ modelStateP
-          (Right agents', agentWires') = stepWiresP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
-          (mdeadAgents, removal') = stepWireP removal dt modelStateP
-          (mnewAgents, addition') = stepWireP addition dt modelStateP
-          deadAgents = case mdeadAgents of Left _ -> IntSet.empty
-                                           Right as -> as
-          newAgents = case mnewAgents of Left _ -> []
-                                         Right as -> as
-      newAgentWires <- genNewAgents (length newAgents)
-      let newAgentIndices = map fst newAgentWires
-          output = ReactiveOutput {collection = (removeSet agents' deadAgents) `IntMap.union` 
+evolvePopulation extractPop createAgent state = helper state where
+    helper  (PopulationState agentWires removal addition) = 
+        mkGen $ \dt modelStateP -> do
+          let prevAgents = collection . extractPop  $ modelStateP
+              (Right agents', agentWires') = stepWiresP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
+              (mdeadAgents, removal') = stepWireP removal dt modelStateP
+              (mnewAgents, addition') = stepWireP addition dt modelStateP
+              deadAgents = case mdeadAgents of Left _ -> IntSet.empty
+                                               Right as -> as
+              newAgents = case mnewAgents of Left _ -> []
+                                             Right as -> as
+          newAgentWires <- genNewAgents (length newAgents) createAgent
+          let newAgentIndices = map fst newAgentWires
+              output = ReactiveOutput {collection = (removeSet agents' deadAgents) `IntMap.union` 
                                                  IntMap.fromList (zip newAgentIndices newAgents),
-                                   removed = deadAgents,
-                                   added = (IntSet.fromList newAgentIndices)}
-          newWires = removeSet agentWires' deadAgents `IntMap.union` IntMap.fromList newAgentWires
+                                       removed = deadAgents,
+                                       added = (IntSet.fromList newAgentIndices)}
+              newWires = removeSet agentWires' deadAgents `IntMap.union` IntMap.fromList newAgentWires
                            
-      return (Right output, evolvePopulation extractPop (PopulationState newWires removal' addition'))
+          return (Right output, helper (PopulationState newWires removal' addition'))
 
-evolveNetwork :: Network n => 
-                 (model -> ReactiveOutput a) -> 
-                 (model -> ReactiveOutput b) ->
-                 ModelWire model n -> ModelWire model n
--- evolveNetwork extractPop1 extractPop2 networkWire
--- augments the user-specified network wire with automatic handling of death and (TODO) birth
 
-evolveNetwork extractPop1 extractPop2 networkWire = helper networkWire where
-    helper networkWire = 
-        mkGen $ \dt model -> do
-          let removed1 = removed (extractPop1 model)
-              removed2 = removed (extractPop2 model)
-                          
---evolveSymmetricNetwork extractPop1
+
+
+
+
 
 
 
