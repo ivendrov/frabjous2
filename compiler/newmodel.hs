@@ -5,6 +5,7 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 
 import Control.Wire hiding (getRandom)
@@ -13,12 +14,10 @@ import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
 
 -- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, 
-                       (.), id, unzip, all, any, zipWith3, (++), sum)
+import Prelude hiding ((.), id)
 import Control.Arrow
 import Text.Printf
 import qualified Data.List as List
-import Data.Vector hiding (modify)
 import Data.Ord
 import Data.Monoid
 import Data.Graph
@@ -30,117 +29,143 @@ import Control.Wire.Classes
 import StandardLibrary
 import InternalLibrary
 
+
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
+
 -- START GENERATED CODE
 
 data State = S | I | R deriving (Eq, Show)
 
 
 
-data Person = Person { _income :: Double, _state :: State, _neighbours :: Vector Person, _nbhd :: Nbhd, _idxPerson :: Int } deriving Typeable
-data Nbhd = Nbhd { _avgIncome :: Double, _residents :: Vector Person, _idxNbhd :: Int } deriving Typeable
+data Person = Person { getIncome :: Double, getState :: State} 
+data Nbhd = Nbhd { getAvgIncome :: Double} 
 
-mkLabels [ ''Person, ''Nbhd ]
 
-getIncome = get income
-getState = get state
-getNeighbours = get neighbours
-getNbhd = get nbhd
-getAvgIncome = get avgIncome
-getResidents = get residents
+data ModelState = ModelState { peopleState :: PopulationWire ModelOutput Person,
+                               nbhdsState :: PopulationWire ModelOutput Nbhd }
+data ModelOutput = ModelOutput { people :: ReactiveOutput Person, 
+                                 nbhds :: ReactiveOutput Nbhd, 
+                                 neighboursNetwork :: SymmetricNetwork}
 
-stateWire = 
- let {income = function (getIncome);state = function (getState);neighbours = function (getNeighbours);nbhd = function (getNbhd);avgIncome = function (getAvgIncome);residents = function (getResidents)} 
- in statechart state transitions
+income = function (getIncome . prevState)
+state = function (getState . prevState)
+neighbours i = function (\s -> view1 (neighboursNetwork . modelState $ s) i (collection .people . modelState $ s))
+
+stateWire i = statechart state transitions
   where infectionRatePerPerson = 0.4
-        calcInfectionRate :: Person -> Double
-        calcInfectionRate p = infectionRatePerPerson * 
-                             (fromIntegral (length (filter (==I) (map (getState) (getNeighbours p)))))
+        calcInfectionRate = proc input -> do
+                              nbs <- neighbours i-< input 
+                              returnA -< infectionRatePerPerson * 
+                                          (fromIntegral (length (filter (==I) (map getState nbs))))
         transitions state = 
               case state of 
-                     S -> pure I . rate . arr (calcInfectionRate) 
+                     S -> pure I . rate . calcInfectionRate
                      I -> pure R . after 3
                      R -> pure S . after 3
  
-incomeWire = 
- let {income = function (getIncome);state = function (getState);neighbours = function (getNeighbours);nbhd = function (getNbhd);avgIncome = function (getAvgIncome);residents = function (getResidents)} 
- in proc input -> do { __0 <- (income) -< input ; returnA -< ( __0 * 3
-) } 
-avgIncomeWire = 
- let {income = function (getIncome);state = function (getState);neighbours = function (getNeighbours);nbhd = function (getNbhd);avgIncome = function (getAvgIncome);residents = function (getResidents)} 
- in arr (averageIncome . getResidents) 
+incomeWire i =  proc input -> do { __0 <- income -< input ; returnA -< ( __0 * 3) } 
+avgIncomeWire i = pure 0 -- function (averageIncome . getResidents) 
     where averageIncome people = (sum . map (getIncome) $ people) 
-                                  / fromIntegral (length people)
+                                  / fromIntegral (length people) 
  
 
-instance Agent Person where 
-    idx = idxPerson
-    localChangeWire = helper stateWire incomeWire where
+instance Agent Person ModelOutput where 
+    newRandWire id = helper (stateWire id) (incomeWire id) where
            helper stateWire incomeWire =
               mkGen $ \dt x -> do
                 (Right stateNew, stateWire') <- stepWire stateWire dt x
                 (Right incomeNew, incomeWire') <- stepWire incomeWire dt x
-                return (Right $ x {_state = stateNew, _income = incomeNew}, helper stateWire' incomeWire')
-instance Agent Nbhd where 
-    idx = idxNbhd
-    localChangeWire = helper avgIncomeWire where
+                return (Right $ (prevState x) {getState = stateNew, getIncome = incomeNew}, helper stateWire' incomeWire')
+instance Agent Nbhd ModelOutput where 
+    newRandWire id = helper (avgIncomeWire id) where
            helper avgIncomeWire =
               mkGen $ \dt x -> do
                 (Right avgIncomeNew, avgIncomeWire') <- stepWire avgIncomeWire dt x
-                return (Right $ x {_avgIncome = avgIncomeNew}, helper avgIncomeWire')
+                return (Right $ (prevState x) {getAvgIncome = avgIncomeNew}, helper avgIncomeWire')
 
-fclabels [d|
-    data ModelState = ModelState { peopleState :: WireP (Vector Person) (PopulationOutput Person), nbhdsState :: WireP (Vector Nbhd) (PopulationOutput Nbhd) }
-    data ModelOutput = ModelOutput { people :: Vector Person, nbhds :: Vector Nbhd }
-          |]
 
-initialModelState :: ModelOutput -> ModelState
-initialModelState initialOutput =
-   ModelState (evolvePopulation (PopulationState (replicate (length (get people initialOutput)) localChangeWire) peopleRemove peopleAdd)) (evolvePopulation (PopulationState (replicate (length (get nbhds initialOutput)) localChangeWire) nbhdsRemove nbhdsAdd)) where{ peopleRemove = arr (filter (\ p -> getState p == R)) ; peopleAdd = never ; nbhdsRemove = never ; nbhdsAdd = never }
 
-evolveModel :: ModelState -> WireP ModelOutput ModelOutput
-evolveModel mstate =
+initialModelState :: [Person] -> [Nbhd] -> ([Int] -> SymmetricNetwork) -> ModelMonad (ModelState, ModelOutput)
+initialModelState peopleInit nbhdsInit neighboursNetwork= do 
+  let peopleCount = length peopleInit
+      nbhdsCount = length nbhdsInit
+  peopleIndexed <- genNewAgents peopleCount
+  nbhdsIndexed <- genNewAgents nbhdsCount
+  let (peopleIDs, initialPeople) =  unzip peopleIndexed
+      (nbhdIDs, initialNbhds) = unzip nbhdsIndexed
+      peopleState = PopulationState (IntMap.fromList peopleIndexed) peopleRemove peopleAdd
+      nbhdState = PopulationState (IntMap.fromList nbhdsIndexed) nbhdsRemove nbhdsAdd
+  return $
+   (ModelState (evolvePopulation people peopleState)
+              (evolvePopulation nbhds nbhdState),
+    ModelOutput {people = ReactiveOutput { collection = IntMap.fromList (zip peopleIDs peopleInit),
+                                           removed = IntSet.empty,
+                                           added = IntSet.empty},
+                 nbhds = ReactiveOutput { collection = IntMap.fromList (zip nbhdIDs nbhdsInit),
+                                          removed = IntSet.empty,
+                                          added = IntSet.empty},
+                 neighboursNetwork = neighboursNetwork peopleIDs
+                 })
+ where{ peopleRemove = never; -- TODO try death 
+        peopleAdd = never ; 
+        nbhdsRemove = never ; 
+        nbhdsAdd = never}
+
+evolveModel :: ModelState -> ModelWire ModelOutput ModelOutput
+evolveModel (ModelState peopleState nbhdsState) =
   mkGen $ \dt input -> do
-    (Right peopleOutput, peopleState) <- stepWire (get peopleState mstate) dt (get people input)
-    (Right nbhdsOutput, nbhdsState) <- stepWire (get nbhdsState mstate) dt (get nbhds input)
-    let
-      peopleNew = processDeath nbhd nbhdsNew (get removedIndices nbhdsOutput) $ get agents peopleOutput
-      nbhdsNew = processDeath residents peopleNew (get removedIndices peopleOutput) $ get agents nbhdsOutput
-      output = modify (pairLabel (people, nbhds)) (computeNetwork (nbhd, residents) network0) $ ModelOutput peopleNew nbhdsNew where{ network0 = evenlyDistribute }
+    (Right peopleOutput, peopleState) <- stepWire peopleState dt input
+    (Right nbhdsOutput, nbhdsState) <- stepWire nbhdsState dt input
+    let output = input { people = peopleOutput, nbhds = nbhdsOutput}  
+     -- now update networks to handle birth and death, and THEN run the network evolution wires
+     -- output = modify (pairLabel (people, nbhds)) (computeNetwork (nbhd, residents) network0) $ ModelOutput peopleNew nbhdsNew where{ network0 = evenlyDistribute }
     return (Right output, evolveModel (ModelState peopleState nbhdsState))
 
 
 -- END GENERATED CODE
 
-modelWire :: WireP ModelOutput ModelOutput
-modelWire = evolveModel (initialModelState startingModel)       
-
 model :: WireP () ModelOutput
-model = loopWire startingModel modelWire
+model = let initPair = (mkStdGen 4, 0)
+            initialization = initialModelState startingPeople startingNbhds startingNetwork
+            ((state,output), afterPair) = runModel initialization initPair
+            pureModelWire = purifyModel (evolveModel state) afterPair
+         in loopWire output pureModelWire
 
 -- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
 -- every time it is evaluated (have to write own combinator because this arrow doesn't satisfy ArrowLoop
 loopWire :: a -> WireP a a -> WireP () a
-loopWire init transition = mkPure $ \ dt _ -> 
-                           let (Right next', transition') = stepWireP transition dt init
-                           in (Right next', loopWire next' transition')
+loopWire init transition =  forI 1 . pure init <|> result init transition where
+    result init transition = mkPure $ \ dt _ -> 
+             let (Right next', transition') = stepWireP transition dt init
+             in (Right next', result next' transition')
                          
       
 
 
-     
+
+
+    
 -- ----------------------
 -- 5. I/O 
 wire :: Int ->  WireP () String
 wire n = forI n . arr show . 
          (model >>> 
-                    (arr (get people) >>> 
+                    (arr people >>> 
 
-                             (arr (map (get state)))
-                             &&& 
-			     (arr (map (get income)))                          
+                             (arr (map (getState) . IntMap.elems . collection))
+                             {-&&& 
+			     (arr (map (getIncome) . IntMap.elems . collection))       -}                   
                              
                              
                     )
+                    &&&
+                    (arr neighboursNetwork) 
                    )
   
 
@@ -162,6 +187,18 @@ main = do
 -- STARTING STATE
 
 
+startingPeople = zipWith Person
+                 startingIncomes
+                 startingStates
+    where size = 5
+          numInfected = 1
+          startingIncomes = [1 .. size]
+          startingStates = replicate numInfected I ++ replicate (size-numInfected) S
+
+startingNbhds = []
+startingNetwork = randomNetwork (mkStdGen 1) 0.3
+
+{-
 startingPeople = zipWith5 Person 
                  startingIncomes 
                  startingStates 
@@ -182,3 +219,4 @@ startingNbhds = zipWith3 Nbhd
     where initNumNbhds = 2
 
 startingModel = ModelOutput startingPeople startingNbhds
+-}

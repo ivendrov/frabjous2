@@ -16,65 +16,47 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module InternalLibrary -- TODO only export what needs to be exported
 where
 
 -- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, 
-                       (.), id, unzip, all, any, zipWith3, (++), sum)
+import Prelude hiding ((.), id, all, foldr)
+import Data.Foldable
 import Control.Monad hiding (when)
-import Control.Monad.Random (RandomGen, Rand, runRand)
+import Control.Monad.Random (RandomGen, Rand, runRand, RandT, runRandT, getSplit)
+import Control.Monad.State (State)
+import qualified Control.Monad.State as State
 import Control.Monad.Identity (Identity)
 import Control.Arrow
 import Control.Wire
 import Text.Printf
 import qualified Data.List as List
-import Data.Vector
+
 import Data.Ord
 import Data.Monoid
 import Data.Maybe (isJust, fromJust)
 import Data.Function (on)
-import Data.Graph
 import Data.Tuple (swap)
 import Data.Label
 import Data.Typeable
+import Data.Either (partitionEithers)
+
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
 
 
 -- FRABJOUS STANDARD LIBRARY
 
-----------------
--- A. Utility --
-----------------
-type AdjList = Vector (Vector Int)
-
-
---  0) Label generator (used for networks)
-pairLabel (l1,l2) = point $ 
-               (,) 
-               <$> fstL >- l1
-               <*> sndL >- l2 where
-                   (fstL, sndL) = $(getLabel ''(,))
-
-
---  1) Removal
-
--- removeIdxMap deletions i is the new index of the element 
--- that used to be at the ith position before the elements at indices "deletions" were removed
--- deletions must be in increasing order
-removeIdxMap :: Vector Int -> (Int -> Maybe Int)
-removeIdxMap deletions i = if (any (==i) deletions) then Nothing
-                           else Just $ i - length (takeWhile (<i) deletions)
-
-removeMap size deletions = findIndices (isJust) $ 
-                           map (removeIdxMap deletions) (fromList [0 .. size - 1])
-
-remove deletions v = backpermute v (removeMap (length v) deletions)
-regenIndices v = map (fromJust) . filter (isJust) . map (removeIdxMap v)
-
-
-
---  2) Wire Combinators
+------------------------
+-- A. Wire Combinators --
+------------------------
 
 
 
@@ -91,75 +73,189 @@ purifyRandom wire gen = mkPure $ \dt x ->
 
                     
 
--- Parallel wire operator (just pure wires for now)
-par :: Vector (WireP a b) -> WireP (Vector a) (Vector b)
-par wires = 
-    mkPure $ \dt inputs -> 
-        let (value, wires') = stepWiresP wires dt inputs
-        in (Right value, par wires')
 
 -- steps each wire by the given timestep
 stepWiresP wires dt inputs = 
-    let dts = replicate (length wires) dt 
-        (values, wires') = unzip $ zipWith3 stepWireP wires dts inputs 
-        right x = case x of 
-                    Right y -> y
-                    Left _ -> error "cannot extract right from a Left contructor"
-        isRight x = case x of
-                      Right _ -> True
-                      Left (Last _) -> False
-        value = if (all isRight values) 
-                then map right values
+    let results = IntMap.mapWithKey (\key val -> stepWireP val dt (inputs IntMap.! key)) wires
+        (lefts, rights) = IntMap.mapEither fst results 
+        wires' = IntMap.map snd results
+        value = if (IntMap.null lefts) then rights
                 else error "wires in stepWiresP must produce"  -- if a single wire doesn't produce, nothing produces
-        in (value, wires')
+       
+        in (Right value, wires')
+
+
+
+
+
+
+
  
-
+-------------------------------
 -- B. Agents and Populations
+-------------------------------
+data AgentInput model a = AgentInput {modelState :: model,
+                                      prevState :: a}
 
-class Agent a where
-    idx :: a :-> Int
-    localChangeWire :: WireP a a
-
-fclabels [d|
-             data PopulationState a = PopulationState { agentWires :: Vector (WireP a a),
-                                                        removal :: WireP (Vector a) (Vector a), --death
-                                                        addition :: WireP (Vector a) (Vector a)} --birth
-
-             data PopulationOutput a = PopulationOutput { agents :: Vector a,
-                                                          removedIndices :: Vector Int}
+type AgentWire model a = WireP (AgentInput model a) a
+type ID = Int -- agent ID
+class Agent a model where
+    -- | Create a new agent wire with the given random seed and agent identifier
+    newAgentWire :: (RandomGen g) => g -> ID -> AgentWire model a
+    newAgentWire g id = purifyRandom (newRandWire id) g
+    newRandWire :: (RandomGen g) => ID -> Wire LastException (Rand g) (AgentInput model a) a
 
 
-          |]
+type Collection a = IntMap a
+                                                
+data ReactiveOutput a = ReactiveOutput {collection :: Collection a,
+                                        removed, added :: IntSet}
+-- TODO add other accessors to reactiveOutput 
+type ReactiveCollection input a = WireP input (ReactiveOutput a)
+
+
+
+
+
+
+data PopulationState model a = PopulationState { agentWires :: Collection (AgentWire model a),
+                                                 removal :: WireP model IntSet, --death
+                                                 addition :: WireP model [a]} 
+                                                 -- TODO have addition also return birth-added links to specific networks
+
+
+-- | remove a set of keys from a map
+removeSet :: IntMap a -> IntSet -> IntMap a
+removeSet map set = foldr IntMap.delete map (IntSet.toList set)
+
+
+
+-- | generate a new agent with a new ID and random seed
+genNewAgent :: (Agent a input, RandomGen g) => RandT g (State ID) (ID, AgentWire input a)
+genNewAgent = do 
+  i <- State.get
+  State.modify (+1)
+  g <- getSplit
+  return (i, newAgentWire g i)
+
+genNewAgents n = replicateM n genNewAgent
+
+type ModelMonad  = RandT StdGen (State ID)
+
+type ModelWire = Wire LastException ModelMonad
+
+runModel :: ModelMonad a -> (StdGen, ID) -> (a,(StdGen, ID))
+runModel m (gen, id) = let state_output_gen = runRandT m gen
+                           ((output, gen'), id') = (State.runState state_output_gen id)
+                       in (output, (gen', id'))
+-- purifyModel wire gen takes a wire in the Model monad and an initial generator and state,
+-- and makes it into a pure wire.
+purifyModel :: ModelWire a b -> (StdGen, ID) -> WireP a b
+purifyModel wire pair = mkPure $ \dt x ->
+                                    let ((output, wire'), pair') = runModel (stepWire wire dt x) pair
+                                    in (output, purifyModel wire' pair')
+
+
+
+type PopulationWire model a  = 
+    ModelWire model (ReactiveOutput a)
 
 -- evolve the local properties of the population (unrelated to networks)
--- i.e modify each agent locally, then apply death and birth (UNIMPLEMENTED)
-evolvePopulation :: (Agent a, Monad m) => PopulationState a -> Wire e m (Vector a) (PopulationOutput a)
-evolvePopulation (PopulationState agentWires removal addition) = 
-    mkPure $ \dt agents ->
-        let (agents', agentWires') = stepWiresP agentWires dt agents
-            (deadAgents, removal') = stepWireP removal dt agents'
-            (newAgents, addition') = stepWireP addition dt agents'
-        in
-           let removedIndices = case deadAgents of 
-                                  Left _ -> fromList []
-                                  Right deads -> map (get idx) deads
-               agentsAfterRemoval = remove removedIndices agents'
-               newborns = case newAgents of
-                            Left _ -> fromList []
-                            Right as -> as
-              
-               outputAgents = zipWith (set idx) (fromList [0 .. length agentsAfterRemoval - 1]) agentsAfterRemoval
-               newWires = (remove removedIndices agentWires')
-               output = PopulationOutput outputAgents removedIndices
+-- i.e modify each agent locally, then apply death and birth 
+evolvePopulation :: Agent a model => 
+                     (model -> ReactiveOutput a) -> 
+                     PopulationState model a ->
+                        PopulationWire model a 
+evolvePopulation extractPop (PopulationState agentWires removal addition) = 
+    mkGen $ \dt modelStateP -> do
+      let prevAgents = collection . extractPop $ modelStateP
+          (Right agents', agentWires') = stepWiresP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
+          (mdeadAgents, removal') = stepWireP removal dt modelStateP
+          (mnewAgents, addition') = stepWireP addition dt modelStateP
+          deadAgents = case mdeadAgents of Left _ -> IntSet.empty
+                                           Right as -> as
+          newAgents = case mnewAgents of Left _ -> []
+                                         Right as -> as
+      newAgentWires <- genNewAgents (length newAgents)
+      let newAgentIndices = map fst newAgentWires
+          output = ReactiveOutput {collection = (removeSet agents' deadAgents) `IntMap.union` 
+                                                 IntMap.fromList (zip newAgentIndices newAgents),
+                                   removed = deadAgents,
+                                   added = (IntSet.fromList newAgentIndices)}
+          newWires = removeSet agentWires' deadAgents `IntMap.union` IntMap.fromList newAgentWires
                            
-           in (Right output, evolvePopulation (PopulationState newWires removal' addition'))
+      return (Right output, evolvePopulation extractPop (PopulationState newWires removal' addition'))
+
+evolveNetwork :: Network n => 
+                 (model -> ReactiveOutput a) -> 
+                 (model -> ReactiveOutput b) ->
+                 ModelWire model n -> ModelWire model n
+-- evolveNetwork extractPop1 extractPop2 networkWire
+-- augments the user-specified network wire with automatic handling of death and (TODO) birth
+
+evolveNetwork extractPop1 extractPop2 networkWire = helper networkWire where
+    helper networkWire = 
+        mkGen $ \dt model -> do
+          let removed1 = removed (extractPop1 model)
+              removed2 = removed (extractPop2 model)
+                          
+--evolveSymmetricNetwork extractPop1
+
+
 
 -- C. Networks
+  
+
+type ToMany = IntMap IntSet
+networkTranspose :: (Network n) => n -> n
+networkTranspose n  = fromEdges (vertices n) . map swap . toEdges $ n
+--type ToOne = IntMap Int
+--type ToMaybeOne = IntMap (Maybe Int)
+
+-- represents a general interface to a directed network, with (potentially) distinct sets
+-- of source and destination vertices
+class Network n where 
+    vertices :: n -> [Int] 
+
+    view1 :: n -> Int -> Collection a -> [a]
+    view2 :: n -> Int -> Collection a -> [a]
+
+    addEdges1 :: ToMany -> n -> n
+    addEdges2 :: ToMany -> n -> n
+
+    -- | removes a set of vertices from the first population
+    removeVertices1 :: n -> [Int] -> n
+
+    -- | removes a set of vertices from the second population
+    removeVertices2 :: n -> [Int] -> n
+
+    fromEdges :: [Int] -> [(Int, Int)] -> n
+    toEdges :: n -> [(Int, Int)]
+
+type SymmetricNetwork = ToMany
+instance Network SymmetricNetwork where
+    vertices = IntMap.keys 
+
+    view1 network index collection = map (collection IntMap.!) $ IntSet.elems (network IntMap.! index)
+    view2 = view1
+    addEdges1 edges network = let u = IntMap.unionWith IntSet.union 
+                              in network `u` edges `u` (networkTranspose edges)
+    addEdges2 = addEdges1
+
+    removeVertices1 = foldr IntMap.delete
+    removeVertices2 network indices = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
+
+    toEdges  = List.concatMap (\(i, adj) -> map ((,) i) (IntSet.toList adj)) . IntMap.toList
+    fromEdges vertices edges = let adjLists = IntMap.fromList (zip vertices (repeat IntSet.empty))
+                                 in foldr (\(i1,i2) -> IntMap.adjust (IntSet.insert i2) i1) 
+                                    adjLists 
+                                    edges
+                                    
+--type NetworkWire model = WireP model Network
 
 
 
-
-
+{- 
 -- 2) Modification
 
 tieMany agents adj = map (map (agents !)) adj
@@ -245,3 +341,5 @@ processDeath label newBs deadBs as =
                                     oldAdj = getIdxOne oldNeighbours
                                     oldNeighbours = map (get label) as
                    Nothing -> error "case not implemented yet"
+
+-}

@@ -12,13 +12,16 @@ module StandardLibrary
   never,
   rate,
   rSwitch,
-  statechart)
+  statechart,
+  randomNetwork)
 where
 
 import InternalLibrary
+import Prelude hiding ((.), id)
 import Control.Monad.Random (RandomGen, Rand, getRandom)
 import Control.Wire hiding (getRandom)
 import Data.Monoid
+import Data.Tuple (swap)
 
 -- 1. WIRE COMBINATORS
 
@@ -68,20 +71,20 @@ statechart start transitions =
 
 
 -- 2. NETWORKS
-{-
+
 --  1) Library functions for creation 
-randomNetwork :: RandomGen r => r -> Double -> Int -> AdjList
--- randomNetwork rng fraction size = a random network with the given number of nodes. 
+randomNetwork :: RandomGen r => r -> Double -> [Int] -> SymmetricNetwork
+-- randomNetwork rng fraction size = a random network with the given integer vertices. 
 --   each pair of nodes has a "fraction" probability of an edge
 
-randomNetwork rng fraction size =  fromList . List.map (fromList) $ adjList where
-    edges' = List.map snd . List.filter ((<fraction) . fst) . List.zip (randoms rng) $ 
-            [(u,v) | u <- [0 .. size - 1], 
-                     v <- [u+1 .. size -1]]
-    edges = edges' List.++ (List.map swap edges')
-    adjList = List.map (\i -> List.map (snd) . List.filter (\edge -> fst edge == i) $ edges) [0 .. size -1] 
+randomNetwork rng fraction vertices =  fromEdges vertices edges where
+    edges' = map snd . filter ((<fraction) . fst) . zip (randoms rng) $ 
+            [(u,v) | u <- vertices, 
+                     v <- vertices, u < v]
+    edges = edges' ++ (map swap edges') 
 
 
+{-
 -- sample dynamic network specifications : 
 
 -- a. makes "v" a neighbour of "u" iff (pred u v)
