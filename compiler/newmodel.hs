@@ -93,8 +93,8 @@ nbhdWire g id = purifyRandom (helper (avgIncomeWire id)) g where
                 (Right avgIncomeNew, avgIncomeWire') <- stepWire avgIncomeWire dt x
                 return (Right $ (prevState x) {getAvgIncome = avgIncomeNew}, helper avgIncomeWire')
 
-peopleRemove = never -- TODO try death 
-peopleAdd = never 
+peopleRemove = arr (IntMap.keysSet . IntMap.filter (\p -> getState p == R) . collection . people) 
+peopleAdd = pure [Person {getState = S, getIncome = 0}] . rate . 1
 nbhdsRemove = never 
 nbhdsAdd = never
 
@@ -112,7 +112,7 @@ newAgentWires :: Map String (StdGen -> ID -> AgentWire ModelOutput Agent)
 newAgentWires = Map.fromList [("people", personWire), ("nbhds", nbhdWire)]
 
 
-neighboursNetworkWire = poissonRandomSymmetric people 0.2
+neighboursNetworkWire = poissonRandomSymmetric people 0.5
 networkWiresMap = Map.fromList [("neighboursNetwork", neighboursNetworkWire)]
 
 
@@ -144,17 +144,19 @@ initialModelState initialPops network = do
 evolveModel :: ModelState -> ModelWire ModelOutput ModelOutput
 evolveModel (ModelState populationWires networkWires) =
   mkGen $ \dt input -> do
+    -- 1. evolve the populations
     populationResults <- Traversable.mapM (\p -> stepWire p dt input) populationWires
-    networkResults <- Traversable.mapM (\n -> stepWire n dt input) networkWires
-    
     let populationWires' = Map.map snd populationResults
-        networkWires' = Map.map snd networkResults
         fromRight (Right x) = x
         popOutputs = Map.map (fromRight . fst) populationResults
+        outputAfterPop = input { populations = popOutputs }
+
+    -- 2. evolve the networks
+    networkResults <- Traversable.mapM (\n -> stepWire n dt outputAfterPop) networkWires
+    let networkWires' = Map.map snd networkResults
         networkOutputs = Map.map (fromRight . fst) networkResults
-        output = input { populations = popOutputs, networks = networkOutputs}  
-     -- now update networks to handle birth and death, and THEN run the network evolution wires
-     -- output = modify (pairLabel (people, nbhds)) (computeNetwork (nbhd, residents) network0) $ ModelOutput peopleNew nbhdsNew where{ network0 = evenlyDistribute }
+        output = outputAfterPop {networks = networkOutputs}  
+
     return (Right output, evolveModel (ModelState populationWires' networkWires'))
 
 
@@ -193,9 +195,9 @@ wire n = forI n . arr show .
 			     (arr (map (getIncome) . IntMap.elems . collection))       -}                   
                              
                              
-                    )
+                    ){-
                     &&&
-                    (arr neighboursNetwork) 
+                    (arr ( fst . neighboursNetwork)) -}
                    )
   
 

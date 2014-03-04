@@ -118,8 +118,8 @@ type ReactiveCollection input a = WireP input (ReactiveOutput a)
 
 
 data PopulationState model a = PopulationState { agentWires :: Collection (AgentWire model a),
-                                                 removal :: WireP model IntSet, --death
-                                                 addition :: WireP model [a]} 
+                                                 removal :: ModelWire model IntSet, --death
+                                                 addition :: ModelWire model [a]} 
                                                  -- TODO have addition also return birth-added links to specific networks
 
 
@@ -170,9 +170,9 @@ evolvePopulation extractPop createAgent state = helper state where
         mkGen $ \dt modelStateP -> do
           let prevAgents = collection . extractPop  $ modelStateP
               (Right agents', agentWires') = stepWiresP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
-              (mdeadAgents, removal') = stepWireP removal dt modelStateP
-              (mnewAgents, addition') = stepWireP addition dt modelStateP
-              deadAgents = case mdeadAgents of Left _ -> IntSet.empty
+          (mdeadAgents, removal') <- stepWire removal dt modelStateP
+          (mnewAgents, addition') <- stepWire addition dt modelStateP
+          let deadAgents = case mdeadAgents of Left _ -> IntSet.empty
                                                Right as -> as
               newAgents = case mnewAgents of Left _ -> []
                                              Right as -> as

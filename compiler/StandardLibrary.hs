@@ -38,7 +38,7 @@ never = Control.Wire.empty
 -- a wire that takes as input the rate of infection, and produces a unit value with a rate
 -- corresponding to the given time, minus inaccuracy with multiple occurrences in a 
 -- single time interval
-rate :: (RandomGen g) => Wire LastException (Rand g) Double ()
+rate :: MonadRandom m  => Wire LastException m Double ()
 rate = mkGen $
            \dt lambda -> do 
              e <- getRandom
