@@ -13,13 +13,15 @@ module StandardLibrary
   rate,
   rSwitch,
   statechart,
-  randomNetwork)
+  randomNetwork,
+  randomSymmetricNetwork,
+  poissonRandomSymmetric)
 where
 
 import InternalLibrary
 import Prelude hiding ((.), id)
-import Control.Monad.Random (RandomGen, Rand, getRandom)
-import Control.Wire hiding (getRandom)
+import Control.Monad.Random
+import Control.Wire hiding (getRandom, MonadRandom)
 import Data.Monoid
 import Data.Tuple (swap)
 
@@ -72,16 +74,45 @@ statechart start transitions =
 
 -- 2. NETWORKS
 
---  1) Library functions for creation 
-randomNetwork :: RandomGen r => r -> Double -> [Int] -> SymmetricNetwork
--- randomNetwork rng fraction size = a random network with the given integer vertices. 
---   each pair of nodes has a "fraction" probability of an edge
+--  A) Library functions for creation 
 
-randomNetwork rng fraction vertices =  fromEdges vertices edges where
-    edges' = map snd . filter ((<fraction) . fst) . zip (randoms rng) $ 
-            [(u,v) | u <- vertices, 
-                     v <- vertices, u < v]
-    edges = edges' ++ (map swap edges') 
+randomNetwork, randomSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
+-- randomNetwork rng fraction size = a random network with the given integer vertices. 
+-- each directed edge has a given probability of existing
+
+randomNetwork fraction vertices1 vertices2 = do 
+    randoms <- getRandoms 
+    let edges = map snd . filter ((<fraction) . fst) . zip randoms $ 
+            [(u,v) | u <- vertices1, 
+                     v <- vertices2]
+    return $ fromEdges vertices1 vertices2 edges
+
+-- randomSymmetricNetwork is like a random network but for a single population 
+-- each UNDIRECTED edge has a "fraction" probability of existing
+randomSymmetricNetwork fraction vertices _ = do
+  randoms <- getRandoms
+  let edges' = map snd . filter ((<fraction) . fst) . zip randoms $ 
+               [(u,v) | u <- vertices, 
+                v <- vertices, u < v]
+      edges = edges' ++ map swap edges'
+  return $ fromEdges vertices vertices edges
+
+--  B) dynamic networks
+poissonRandomSymmetric :: 
+                 (model -> ReactiveOutput a) -> 
+                 Double ->
+                 ModelWire model ManyToMany
+poissonRandomSymmetric extractPop prob = helper where
+  helper = mkGen $ \dt model -> do
+             let v1 = indices . extractPop $ model
+             network <- randomSymmetricNetwork prob v1 v1
+             return (Right network, helper)
+
+
+             
+
+
+
 
 
 {-

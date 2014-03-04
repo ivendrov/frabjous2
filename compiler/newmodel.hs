@@ -47,12 +47,14 @@ data State = S | I | R deriving (Eq, Show)
 data Agent = Person { getIncome :: Double, getState :: State} 
             | Nbhd { getAvgIncome :: Double} 
 
-data ModelState = ModelState { populationWires :: Map String (PopulationWire ModelOutput Agent)}
+data ModelState = ModelState { populationWires :: Map String (PopulationWire ModelOutput Agent),
+                               networkWires :: Map String (ModelWire ModelOutput ManyToMany)}
 data ModelOutput = ModelOutput { populations :: Map String (ReactiveOutput Agent),
-                                 neighboursNetwork :: SymmetricNetwork}
+                                 networks :: Map String ManyToMany}
 
 people = (Map.! "people") . populations
 nbhds = (Map.! "nbhds") . populations
+neighboursNetwork = (Map.! "neighboursNetwork") . networks
 
 popExtractions = Map.fromList[("people", people), ("nbhds", nbhds)]
 
@@ -110,8 +112,12 @@ newAgentWires :: Map String (StdGen -> ID -> AgentWire ModelOutput Agent)
 newAgentWires = Map.fromList [("people", personWire), ("nbhds", nbhdWire)]
 
 
-initialModelState :: Map String [Agent] -> ([Int] -> SymmetricNetwork) -> ModelMonad (ModelState, ModelOutput)
-initialModelState initialPops neighboursNetwork= do 
+neighboursNetworkWire = poissonRandomSymmetric people 0.2
+networkWiresMap = Map.fromList [("neighboursNetwork", neighboursNetworkWire)]
+
+
+initialModelState :: Map String [Agent] -> ([Int] -> [Int] -> ModelMonad ManyToMany) -> ModelMonad (ModelState, ModelOutput)
+initialModelState initialPops network = do 
   let initialCounts = Map.map length initialPops 
   indexedPops <- Traversable.sequence (mapZipWith genNewAgents initialCounts newAgentWires)
   let ids =  Map.map (map fst) indexedPops
@@ -119,28 +125,37 @@ initialModelState initialPops neighboursNetwork= do
       populationStates = mapZipWith3 PopulationState (Map.map IntMap.fromList indexedPops)
                                                  removalWires
                                                  additionWires
-      state = ModelState (mapZipWith3 evolvePopulation popExtractions newAgentWires populationStates)
+      state = ModelState {populationWires = 
+                              mapZipWith3 evolvePopulation popExtractions newAgentWires populationStates,
+                          networkWires = networkWiresMap}
+                                        
 
       initialPopulationOutput ids initAgents = ReactiveOutput { collection = IntMap.fromList (zip ids initAgents),
                                                                 removed = IntSet.empty,
                                                                 added = IntSet.empty}
       indexedInitialPops = mapZipWith initialPopulationOutput ids initialPops
-      initialOutput = ModelOutput {populations = indexedInitialPops,
-                                   neighboursNetwork = neighboursNetwork (ids Map.! "people")}
+  network <- network (ids Map.! "people") (ids Map.! "people")
+  let initialOutput = ModelOutput {populations = indexedInitialPops,
+                                   networks = Map.fromList 
+                                              [("neighboursNetwork", network)]}
   return $
    (state, initialOutput)
 
 evolveModel :: ModelState -> ModelWire ModelOutput ModelOutput
-evolveModel (ModelState populationStates) =
+evolveModel (ModelState populationWires networkWires) =
   mkGen $ \dt input -> do
-    results <- Traversable.mapM (\p -> stepWire p dt input) populationStates
-    let newStates = Map.map snd results
+    populationResults <- Traversable.mapM (\p -> stepWire p dt input) populationWires
+    networkResults <- Traversable.mapM (\n -> stepWire n dt input) networkWires
+    
+    let populationWires' = Map.map snd populationResults
+        networkWires' = Map.map snd networkResults
         fromRight (Right x) = x
-        outputs = Map.map (fromRight . fst) results
-        output = input { populations = outputs}  
+        popOutputs = Map.map (fromRight . fst) populationResults
+        networkOutputs = Map.map (fromRight . fst) networkResults
+        output = input { populations = popOutputs, networks = networkOutputs}  
      -- now update networks to handle birth and death, and THEN run the network evolution wires
      -- output = modify (pairLabel (people, nbhds)) (computeNetwork (nbhd, residents) network0) $ ModelOutput peopleNew nbhdsNew where{ network0 = evenlyDistribute }
-    return (Right output, evolveModel (ModelState newStates))
+    return (Right output, evolveModel (ModelState populationWires' networkWires'))
 
 
 -- END GENERATED CODE
@@ -211,7 +226,7 @@ startingPeople = zipWith Person
           startingStates = replicate numInfected I ++ replicate (size-numInfected) S
 
 startingNbhds = []
-startingNetwork = randomNetwork (mkStdGen 1) 0.3
+startingNetwork = randomSymmetricNetwork 0.4
 
 {-
 startingPeople = zipWith5 Person 

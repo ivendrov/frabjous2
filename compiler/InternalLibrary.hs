@@ -107,6 +107,8 @@ type Collection a = IntMap a
                                                 
 data ReactiveOutput a = ReactiveOutput {collection :: Collection a,
                                         removed, added :: IntSet}
+indices :: ReactiveOutput a -> [Int]
+indices = IntMap.keys . collection
 -- TODO add other accessors to reactiveOutput 
 type ReactiveCollection input a = WireP input (ReactiveOutput a)
 
@@ -197,14 +199,15 @@ evolvePopulation extractPop createAgent state = helper state where
 
 type ToMany = IntMap IntSet
 networkTranspose :: (Network n) => n -> n
-networkTranspose n  = fromEdges (vertices n) . map swap . toEdges $ n
+networkTranspose n  = fromEdges (vertices1 n) (vertices2 n) . map swap . toEdges $ n
 --type ToOne = IntMap Int
 --type ToMaybeOne = IntMap (Maybe Int)
 
 -- represents a general interface to a directed network, with (potentially) distinct sets
 -- of source and destination vertices
 class Network n where 
-    vertices :: n -> [Int] 
+    vertices1 :: n -> [Int] 
+    vertices2 :: n -> [Int]
 
     view1 :: n -> Int -> Collection a -> [a]
     view2 :: n -> Int -> Collection a -> [a]
@@ -213,33 +216,54 @@ class Network n where
     addEdges2 :: ToMany -> n -> n
 
     -- | removes a set of vertices from the first population
-    removeVertices1 :: n -> [Int] -> n
+    removeVertices1 :: [Int] -> n -> n
 
     -- | removes a set of vertices from the second population
-    removeVertices2 :: n -> [Int] -> n
+    removeVertices2 :: [Int] -> n -> n
 
-    fromEdges :: [Int] -> [(Int, Int)] -> n
+    fromEdges :: [Int] -> [Int] -> [(Int, Int)] -> n
     toEdges :: n -> [(Int, Int)]
 
 type SymmetricNetwork = ToMany
 instance Network SymmetricNetwork where
-    vertices = IntMap.keys 
+    vertices1 = IntMap.keys 
+    vertices2 = vertices1
 
     view1 network index collection = map (collection IntMap.!) $ IntSet.elems (network IntMap.! index)
     view2 = view1
+
     addEdges1 edges network = let u = IntMap.unionWith IntSet.union 
                               in network `u` edges `u` (networkTranspose edges)
     addEdges2 = addEdges1
 
-    removeVertices1 = foldr IntMap.delete
-    removeVertices2 network indices = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
+    removeVertices1 indices network = foldr IntMap.delete network indices
+    removeVertices2 indices network = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
 
     toEdges  = List.concatMap (\(i, adj) -> map ((,) i) (IntSet.toList adj)) . IntMap.toList
-    fromEdges vertices edges = let adjLists = IntMap.fromList (zip vertices (repeat IntSet.empty))
+    fromEdges vertices1 vertices2 edges = let adjLists = IntMap.fromList (zip vertices1 (repeat IntSet.empty))
                                  in foldr (\(i1,i2) -> IntMap.adjust (IntSet.insert i2) i1) 
                                     adjLists 
                                     edges
-                                    
+
+type ManyToMany = (ToMany, ToMany)
+instance Network ManyToMany where
+  
+    vertices1 = vertices1 . fst
+    vertices2 = vertices2 . snd
+
+    view1 = view1 . fst
+    view2 = view1 . snd
+
+    addEdges1 edges = let  u = IntMap.unionWith IntSet.union 
+                      in u edges *** u (networkTranspose edges)
+    addEdges2 edges = let u = IntMap.unionWith IntSet.union
+                      in u (networkTranspose edges) *** u edges
+
+    removeVertices1 removed (n1, n2) = (removeVertices1 removed n1, removeVertices2 removed n2)
+    removeVertices2 removed (n1, n2) = (removeVertices2 removed n1, removeVertices1 removed n2)
+
+    toEdges = toEdges . fst
+    fromEdges vertices1 vertices2 = fromEdges vertices1 vertices1 &&& fromEdges vertices2 vertices2 . map swap
 --type NetworkWire model = WireP model Network
 
 
