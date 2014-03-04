@@ -44,9 +44,10 @@ import Data.Function (on)
 import Data.Tuple (swap)
 import Data.Label
 import Data.Typeable
+import qualified Data.Traversable as Traversable
 import Data.Either (partitionEithers)
 
-import Data.Map (Map)
+import Data.Map (Map, (!))
 import qualified Data.Map as Map
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
@@ -60,6 +61,13 @@ import qualified Data.IntSet as IntSet
 -- A. Wire Combinators --
 ------------------------
 
+-- loopWire init transition = a wire that starts with init, and returns the output of transition on itself 
+-- every time it is evaluated (have to write own combinator because this arrow doesn't satisfy ArrowLoop
+loopWire :: a -> WireP a a -> WireP () a
+loopWire init transition =  forI 1 . pure init <|> result init transition where
+    result init transition = mkPure $ \ dt _ -> 
+             let (Right next', transition') = stepWireP transition dt init
+             in (Right next', result next' transition')
 
 
 -- purifyRandom wire gen takes a wire in the Rand monad and an initial generator,
@@ -113,13 +121,11 @@ indices = IntMap.keys . collection
 type ReactiveCollection input a = WireP input (ReactiveOutput a)
 
 
-
-
-
-
-data PopulationState model a = PopulationState { agentWires :: Collection (AgentWire model a),
-                                                 removal :: ModelWire model IntSet, --death
-                                                 addition :: ModelWire model [a]} 
+type RemovalWire a = ModelWire (ModelOutput a) IntSet
+type AdditionWire a = ModelWire (ModelOutput a) [a]
+data PopulationState a = PopulationState { agentWires :: Collection (AgentWire (ModelOutput a) a),
+                                                 removal :: RemovalWire a, --death
+                                                 addition :: AdditionWire a} 
                                                  -- TODO have addition also return birth-added links to specific networks
 
 
@@ -161,10 +167,10 @@ type PopulationWire model a  =
 
 -- evolve the local properties of the population (unrelated to networks)
 -- i.e modify each agent locally, then apply death and birth 
-evolvePopulation :: (model -> ReactiveOutput a) ->
-                     (StdGen -> ID -> AgentWire model a) ->
-                     PopulationState model a ->
-                        PopulationWire model a 
+evolvePopulation :: (ModelOutput a -> ReactiveOutput a) ->
+                     (StdGen -> ID -> AgentWire (ModelOutput a) a) ->
+                     PopulationState a ->
+                        PopulationWire (ModelOutput a) a 
 evolvePopulation extractPop createAgent state = helper state where
     helper  (PopulationState agentWires removal addition) = 
         mkGen $ \dt modelStateP -> do
@@ -185,14 +191,6 @@ evolvePopulation extractPop createAgent state = helper state where
               newWires = removeSet agentWires' deadAgents `IntMap.union` IntMap.fromList newAgentWires
                            
           return (Right output, helper (PopulationState newWires removal' addition'))
-
-
-
-
-
-
-
-
 
 -- C. Networks
   
@@ -264,6 +262,90 @@ instance Network ManyToMany where
 
     toEdges = toEdges . fst
     fromEdges vertices1 vertices2 = fromEdges vertices1 vertices1 &&& fromEdges vertices2 vertices2 . map swap
+
+
+
+-- C) The model as a whole
+
+data ModelState a = ModelState { populationWires :: Map String (PopulationWire (ModelOutput a) a),
+                               networkWires :: Map String (ModelWire (ModelOutput a) ManyToMany)}
+data ModelOutput a = ModelOutput { populations :: Map String (ReactiveOutput a),
+                                 networks :: Map String ManyToMany}
+
+evolveModel :: ModelState a -> ModelWire (ModelOutput a) (ModelOutput a)
+evolveModel (ModelState populationWires networkWires) =
+  mkGen $ \dt input -> do
+    -- 1. evolve the populations
+    populationResults <- Traversable.mapM (\p -> stepWire p dt input) populationWires
+    let populationWires' = Map.map snd populationResults
+        fromRight (Right x) = x
+        popOutputs = Map.map (fromRight . fst) populationResults
+        outputAfterPop = input { populations = popOutputs }
+
+    -- 2. evolve the networks
+    networkResults <- Traversable.mapM (\n -> stepWire n dt outputAfterPop) networkWires
+    let networkWires' = Map.map snd networkResults
+        networkOutputs = Map.map (fromRight . fst) networkResults
+        output = outputAfterPop {networks = networkOutputs}  
+
+    return (Right output, evolveModel (ModelState populationWires' networkWires'))
+
+
+mapZipWith :: (Ord k) => (a -> b -> c) -> Map k a -> Map k b -> Map k c
+mapZipWith f map1 map2 = Map.mapWithKey (\k -> f (map1 ! k)) map2
+
+mapZipWith3 :: Ord k => (a -> b -> c -> d) -> Map k a -> Map k b -> Map k c -> Map k d
+mapZipWith3 f map1 map2 map3= Map.mapWithKey (\k -> f (map1 ! k) (map2 ! k)) map3
+
+data ModelStructure a = ModelStructure { populationNames, networkNames :: [String],
+                                         removalWires :: Map String (RemovalWire a),
+                                         additionWires :: Map String (AdditionWire a),
+                                         newAgentWires :: Map String (StdGen -> ID -> AgentWire (ModelOutput a) a),
+                                         networkEvolutionWires :: Map String (ModelWire (ModelOutput a) ManyToMany),
+                                         networkPopulations :: Map String (String, String)}
+
+
+
+
+
+
+
+type NetworkGenerator = [Int] -> [Int] -> ModelMonad ManyToMany
+data InitialState a = InitialState { initialPopulations :: Map String [a],
+                                     initialNetworks :: Map String NetworkGenerator}
+
+
+
+
+initialModelState :: ModelStructure a -> InitialState a  -> ModelMonad (ModelState a, ModelOutput a)
+initialModelState structure initialState = do 
+  let initialCounts = Map.map length (initialPopulations initialState)
+  indexedPops <- Traversable.sequence (mapZipWith genNewAgents initialCounts (newAgentWires structure))
+  let ids =  Map.map (map fst) indexedPops
+      wires = Map.map (map snd) indexedPops
+      populationStates = mapZipWith3 PopulationState (Map.map IntMap.fromList indexedPops)
+                                                 (removalWires structure)
+                                                 (additionWires structure)
+      popNames = populationNames structure
+      popExtractions = Map.fromList $ zip popNames (map (\name ->(Map.! name) . populations) popNames)
+      state = ModelState {populationWires = 
+                              mapZipWith3 evolvePopulation popExtractions (newAgentWires structure) populationStates,
+                          networkWires = networkEvolutionWires structure}
+                                        
+
+      initialPopulationOutput ids initAgents = ReactiveOutput { collection = IntMap.fromList (zip ids initAgents),
+                                                                removed = IntSet.empty,
+                                                                added = IntSet.empty}
+      indexedInitialPops = mapZipWith initialPopulationOutput ids (initialPopulations initialState)
+
+      tieWithPopulations initNetwork (pop1, pop2) = initNetwork (ids Map.! pop1) (ids Map.! pop2)
+      initNetworkActions = mapZipWith tieWithPopulations (initialNetworks initialState) (networkPopulations structure)
+  networks <- Traversable.sequence initNetworkActions
+  let initialOutput = ModelOutput {populations = indexedInitialPops,
+                                   networks = networks}
+  return $
+   (state, initialOutput)
+
 --type NetworkWire model = WireP model Network
 
 

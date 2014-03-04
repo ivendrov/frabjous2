@@ -98,11 +98,10 @@ randomSymmetricNetwork fraction vertices _ = do
   return $ fromEdges vertices vertices edges
 
 --  B) dynamic networks
-poissonRandomSymmetric :: 
-                 (model -> ReactiveOutput a) -> 
-                 Double ->
-                 ModelWire model ManyToMany
-poissonRandomSymmetric extractPop prob = helper where
+poissonRandomSymmetric :: Double ->
+                          (model -> ReactiveOutput a) ->                 
+                              ModelWire model ManyToMany
+poissonRandomSymmetric prob extractPop = helper where
   helper = mkGen $ \dt model -> do
              let v1 = indices . extractPop $ model
              network <- randomSymmetricNetwork prob v1 v1
