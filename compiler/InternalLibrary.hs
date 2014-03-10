@@ -346,95 +346,11 @@ initialModelState structure initialState = do
   return $
    (state, initialOutput)
 
---type NetworkWire model = WireP model Network
 
-
-
-{- 
--- 2) Modification
-
-tieMany agents adj = map (map (agents !)) adj
-tieOne agents adj = map (agents !) adj
-getIdxMany :: (Agent a) => Vector (Vector a) -> Vector (Vector Int)
-getIdxMany = map (map (get idx)) 
-getIdxOne :: (Agent a) => Vector a -> Vector Int
-getIdxOne = map (get idx)
-dieMany deads =  map (regenIndices deads)
-dieOne deads = map (fromJust . removeIdxMap deads) -- throws exception if parent dies without all children dying
-
-
-
-
--- computeNetworkSelf computeAdj label as 
--- recomputes the network between agents in as specified by (map (get labelA) as)
--- using computeAdj, and returns the resulting calculation
-computeNetworkSelf :: (Agent a, Typeable a, Typeable setA) => 
-                      (a :-> setA) 
-                      -> (Vector a -> Vector setA) 
-                      -> (Vector a -> Vector a)
-computeNetworkSelf label computeAdj as = 
-    case (gcast label, gcast computeAdj) of
-      (Just (label :: a :-> Vector a),
-       Just (computeAdj :: Vector a -> Vector (Vector a))) ->
-                                         -- many to many case
-                                         newAs where
-                                             newAs = zipWith (set label) newNeighbours as  
-                                             newNeighbours = tieMany newAs newAdj
-                                             newAdj = getIdxMany $ computeAdj as
-      _ -> error "case not implemented"
- 
-
-
-
-
-
-
--- computeNetwork (labelA, labelB) (a :-> setA) (as, bs)
--- recomputes the bipartite network between agents in as and bs specified by 
--- (map (get labelA) as, map (get labelB) bs), 
--- using the given computeAdj to get the first and taking its transpose to get the second 
--- and returns the resulting populations
-computeNetwork :: (Agent a, Agent b, Typeable a, Typeable b, Typeable setB, Typeable setA) => 
-                         (a :-> setB, b :-> setA) 
-                         -> (Vector a -> Vector b -> Vector setB)  
-                         -> (Vector a, Vector b)  
-                         -> (Vector a, Vector b)
-computeNetwork (labelA, labelB) computeAdj (as, bs) = 
-    case (gcast labelA, gcast labelB, gcast computeAdj) of
-      (Just (labelA :: a :-> b) , 
-       Just (labelB :: b :-> Vector a),
-       Just (computeAdj :: Vector a -> Vector b -> Vector b)) -> 
-           -- many to one version
-          (newAs, newBs) where 
-              newAs =  zipWith (set labelA) newANeighbours as 
-              newANeighbours = tieOne newBs newAAdj
-              newBs = zipWith (set labelB) newBNeighbours bs 
-              newBNeighbours = tieMany newAs newBAdj
-              newAAdj = getIdxOne $ computeAdj as bs
-              newBAdj = networkTransposeOneMany newAAdj where
-                   networkTransposeOneMany :: Vector Int -> Vector (Vector Int)
-                   networkTransposeOneMany vi = map residents (fromList [0.. length vi - 1]) where
-                                                  residents i = findIndices (==i) vi -- TODO optimize
-      _ -> error "case not implemented yet"
-                         
-       
-processDeath :: (Agent a, Agent b, Typeable setB, Typeable b) =>
-                    (a :-> setB) -> Vector b -> Vector Int -> Vector a -> Vector a 
-processDeath label newBs deadBs as = 
-    case (gcast label) of 
-      Just label -> -- case label :: a -> Vector b
-          zipWith (set label) newNeighbours as where
-                     newNeighbours = tieMany newBs newAdj
-                     newAdj = dieMany deadBs oldAdj
-                     oldAdj = getIdxMany oldNeighbours
-                     oldNeighbours = map (get label) as 
-      Nothing -> case (gcast label) of
-                   Just label -> -- case label :: a -> b
-                        zipWith (set label) newNeighbours as where
-                                    newNeighbours = tieOne newBs newAdj
-                                    newAdj = dieOne deadBs oldAdj
-                                    oldAdj = getIdxOne oldNeighbours
-                                    oldNeighbours = map (get label) as
-                   Nothing -> error "case not implemented yet"
-
--}
+createModel :: ModelStructure a -> InitialState a -> StdGen -> WireP () (ModelOutput a)
+createModel modelStructure initialState stdgen = 
+    let initPair = (stdgen, 0)
+        initialization = initialModelState modelStructure initialState
+        ((state,output), afterPair) = runModel initialization initPair
+        pureModelWire = purifyModel (evolveModel state) afterPair
+    in loopWire output pureModelWire

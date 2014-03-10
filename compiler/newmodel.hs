@@ -112,31 +112,34 @@ initialState = InitialState startingPopulations startingNetworks
 
 -- END GENERATED CODE
 
-model :: WireP () (ModelOutput Agent)
-model = let initPair = (mkStdGen 4, 0)
-            initialization = initialModelState modelStructure initialState
-            ((state,output), afterPair) = runModel initialization initPair
-            pureModelWire = purifyModel (evolveModel state) afterPair
-         in loopWire output pureModelWire
 
-    
--- ----------------------
--- 5. I/O 
-wire :: Int ->  WireP () String
-wire n = forI n . arr show . 
-         (model >>> 
-                    (arr people >>> 
+model = createModel modelStructure initialState (mkStdGen 3)
+   
 
-                             (arr (map (getState) . IntMap.elems . collection))
-                             {-&&& 
-			     (arr (map (getIncome) . IntMap.elems . collection))       -}                   
-                             
-                             
-                    ){-
-                    &&&
-                    (arr ( fst . neighboursNetwork)) -}
-                   )
-  
+
+
+-- STATISTICS
+type OutputWire a s = WireP (ModelOutput a) s 
+type Statistics a = Map String (OutputWire a String)
+
+peopleState = arr (map getState . IntMap.elems . collection) . arr people 
+percentInfected = arr (\state -> fromIntegral (length (filter (==I) state)) / fromIntegral (length state)) . peopleState
+
+statistics :: Statistics Agent 
+statistics = Map.fromList [("_time", arr show . time),
+                           ("peopleState", arr show . peopleState), 
+                           ("percentInfected", arr show . percentInfected)]
+
+-- generates a wire out of a map of statistics wires by pretty-printing the statistics and their names
+processStatistics :: Statistics a -> OutputWire a String
+processStatistics stats = 
+    mkPure $ \dt input -> 
+        let results = Map.map (\val -> stepWireP val dt input) stats
+            (_, rights) = Map.mapEither fst results
+            stats' = Map.map snd results
+            output = unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights
+        in (Right output, processStatistics stats')
+        
 
 control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
     loop w' session' = do
@@ -147,7 +150,7 @@ control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
                       loop w session
 main = do 
   n <- readLn
-  control return (putStrLn) $ (wire n)
+  control return (putStrLn) $ (forI n . processStatistics statistics . model)
 
 
 -- ----------------------
