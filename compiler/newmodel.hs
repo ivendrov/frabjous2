@@ -108,50 +108,44 @@ modelStructure = ModelStructure {
                    networkPopulations = Map.fromList [("neighboursNetwork", ("people", "people"))]
                  }
 
-initialState = InitialState startingPopulations startingNetworks
-
-
-
--- END GENERATED CODE
-
-
-model = createModel modelStructure initialState (mkStdGen 3)
-   
-
-
-
-
+-- STATISTICS
 
 peopleState = arr (map getState . IntMap.elems . collection) . arr people
 percentInfected = arr (\state -> fromIntegral (length (filter (==I) state)) / fromIntegral (length state)) . peopleState
 
 statistics :: Statistics Agent 
-statistics = Map.fromList [("_time", arr show . time),
-                           ("peopleState", arr show . peopleState), 
+statistics = Map.fromList [--("_time", arr show . time),
+                           --("peopleState", arr show . peopleState), 
                            ("percentInfected", arr show . percentInfected)]
+
+
+-- INITIAL STATE
+
+initialState = liftM2 InitialState startingPopulations startingNetworks
+
+startingPopulations = 
+    Traversable.sequence $ 
+               Map.fromList [("people", startingPeople), ("nbhds", startingNbhds)]
+
+personDistribution = do
+  income <- uniform (0, 10)
+  state <- frequencies [(I, 0.2), (S, 0.9), (R, 0)]
+  return (Person {getIncome = income, 
+                  getState =  state})
+
+startingPeople = draw 100 personDistribution
+
+startingNbhds = draw 5 (return (Nbhd 0))
+
+startingNetworks = return $ Map.fromList [("neighboursNetwork", randomSymmetricNetwork 0.2)]
+
+
+-- OUTPUT
+model = createModel modelStructure initialState (mkStdGen 3)
 
 observers = [(processStatistics statistics, stdout)]
 
 main = do 
   t <- readLn
-  runModelIO (for t . model) observers 0.2
-
-
--- ----------------------
--- 6. Run Configuration
-
--- STARTING STATE
-startingPopulations = Map.fromList [("people", startingPeople), ("nbhds", startingNbhds)]
-
-startingPeople = zipWith Person
-                 startingIncomes
-                 startingStates
-    where size = 5
-          numInfected = 1
-          startingIncomes = [1 .. size]
-          startingStates = replicate numInfected I ++ replicate (size-numInfected) S
-
-startingNbhds = map Nbhd (replicate size 0)
-    where size = 5
-
-startingNetworks = Map.fromList [("neighboursNetwork", randomSymmetricNetwork 0.4)]
+  step <- readLn
+  runModelIO (for t . model) observers step

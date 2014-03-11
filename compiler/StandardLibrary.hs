@@ -8,11 +8,17 @@
 -- The Frabjous standard library
 --------------------------------------------------------------------------
 module StandardLibrary 
- (function, 
+ (-- RANDOM NUMBERS
+  uniform,
+  frequencies,
+  draw,
+  -- WIRE COMBINATORS
+  function, 
   never,
   rate,
   rSwitch,
   statechart,
+  -- NETWORKS
   randomNetwork,
   randomSymmetricNetwork,
   poissonRandomSymmetric)
@@ -21,9 +27,34 @@ where
 import InternalLibrary
 import Prelude hiding ((.), id)
 import Control.Monad.Random
-import Control.Wire hiding (getRandom, MonadRandom)
+import Data.Traversable as Traversable
+import Control.Wire hiding (getRandom, MonadRandom, getRandomR)
 import Data.Monoid
 import Data.Tuple (swap)
+import Data.List
+
+
+-- 0. RANDOM NUMBERS 
+
+uniform :: MonadRandom m => (Double, Double) -> m Double
+uniform = getRandomR 
+
+frequencies :: MonadRandom m => [(a, Double)] -> m a
+frequencies probs = 
+    let (vals, pdf) = unzip probs
+        cdf = scanl1 (+) pdf
+    in do
+      p <- getRandom
+      let Just idx = findIndex (>= p) cdf
+      return (vals !! idx)
+
+draw :: MonadRandom m => Int -> m a -> m [a]
+draw n rand = Traversable.sequence (replicate n rand)
+      
+  
+  
+  
+
 
 -- 1. WIRE COMBINATORS
 

@@ -28,7 +28,7 @@ where
 import Prelude hiding ((.), id, all, foldr)
 import Data.Foldable
 import Control.Monad hiding (when)
-import Control.Monad.Random (RandomGen, Rand, runRand, RandT, runRandT, getSplit)
+import Control.Monad.Random (RandomGen, Rand, runRand, RandT, runRandT, getSplit, evalRand)
 import Control.Monad.State (State)
 import qualified Control.Monad.State as State
 import Control.Monad.Identity (Identity)
@@ -348,10 +348,11 @@ initialModelState structure initialState = do
    (state, initialOutput)
 
 
-createModel :: ModelStructure a -> InitialState a -> StdGen -> WireP () (ModelOutput a)
+createModel :: ModelStructure a -> Rand StdGen (InitialState a) -> StdGen -> WireP () (ModelOutput a)
 createModel modelStructure initialState stdgen = 
-    let initPair = (stdgen, 0)
-        initialization = initialModelState modelStructure initialState
+    let initState = evalRand initialState stdgen
+        initPair = (stdgen, 0)
+        initialization = initialModelState modelStructure initState
         ((state,output), afterPair) = runModel initialization initPair
         pureModelWire = purifyModel (evolveModel state) afterPair
     in loopWire output pureModelWire
