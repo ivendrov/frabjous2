@@ -36,6 +36,7 @@ import Control.Arrow
 import Control.Wire
 import Text.Printf
 import qualified Data.List as List
+import System.IO
 
 import Data.Ord
 import Data.Monoid
@@ -85,7 +86,7 @@ purifyRandom wire gen = mkPure $ \dt x ->
 
 
 -- steps each wire by the given timestep
-stepWiresP wires dt inputs = 
+stepWiresMapP wires dt inputs = 
     let results = IntMap.mapWithKey (\key val -> stepWireP val dt (inputs IntMap.! key)) wires
         (lefts, rights) = IntMap.mapEither fst results 
         wires' = IntMap.map snd results
@@ -175,7 +176,7 @@ evolvePopulation extractPop createAgent state = helper state where
     helper  (PopulationState agentWires removal addition) = 
         mkGen $ \dt modelStateP -> do
           let prevAgents = collection . extractPop  $ modelStateP
-              (Right agents', agentWires') = stepWiresP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
+              (Right agents', agentWires') = stepWiresMapP agentWires dt (IntMap.map (AgentInput modelStateP) prevAgents)
           (mdeadAgents, removal') <- stepWire removal dt modelStateP
           (mnewAgents, addition') <- stepWire addition dt modelStateP
           let deadAgents = case mdeadAgents of Left _ -> IntSet.empty
@@ -354,3 +355,43 @@ createModel modelStructure initialState stdgen =
         ((state,output), afterPair) = runModel initialization initPair
         pureModelWire = purifyModel (evolveModel state) afterPair
     in loopWire output pureModelWire
+
+-- STATISTICS
+type ObserverWire a s = WireP (ModelOutput a) s 
+type Statistics a = Map String (ObserverWire a String)
+
+
+-- TODO function that runs a list of wires and returns a list
+-- genericize stepWiresP!
+stepWiresP wires dt input = 
+    let results = map (\wire -> stepWireP wire dt input) wires
+    in (map fst results, map snd results)
+
+-- generates a wire out of a map of statistics wires by pretty-printing the statistics and their names
+processStatistics :: Statistics a -> ObserverWire a String
+processStatistics stats = 
+    mkPure $ \dt input -> 
+        let results = Map.map (\val -> stepWireP val dt input) stats
+            (_, rights) = Map.mapEither fst results
+            stats' = Map.map snd results
+            output = unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights
+        in (Right output, processStatistics stats')
+
+type ObserverProcess a = (ObserverWire a String, Handle)
+
+
+
+runModelIO :: WireP () (ModelOutput a) -> [ObserverProcess a] -> Double -> IO ()
+runModelIO modelWire observers timestep = loop modelWire (map fst observers) where
+    handles = map snd observers
+    loop w wires = do
+      let (mx, w') = stepWireP w timestep ()
+
+      case mx of 
+        Left ex -> return ()
+        Right x -> do let (outputs, wires') = stepWiresP wires timestep x
+                          genAction handle (Right str) = hPutStrLn handle str
+                          genAction handle (Left _) = return ()
+                          actions = zipWith genAction handles outputs
+                      Traversable.sequence actions
+                      loop w' wires'

@@ -21,10 +21,12 @@ import qualified Data.List as List
 import Data.Ord
 import Data.Monoid
 import Data.Graph
+import Data.Either (rights)
 import Data.Label (fclabels, mkLabels, get, set, modify, (:->))
 import Data.Typeable
 import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
+import System.IO
 
 
 import StandardLibrary
@@ -118,11 +120,9 @@ model = createModel modelStructure initialState (mkStdGen 3)
 
 
 
--- STATISTICS
-type OutputWire a s = WireP (ModelOutput a) s 
-type Statistics a = Map String (OutputWire a String)
 
-peopleState = arr (map getState . IntMap.elems . collection) . arr people 
+
+peopleState = arr (map getState . IntMap.elems . collection) . arr people
 percentInfected = arr (\state -> fromIntegral (length (filter (==I) state)) / fromIntegral (length state)) . peopleState
 
 statistics :: Statistics Agent 
@@ -130,27 +130,11 @@ statistics = Map.fromList [("_time", arr show . time),
                            ("peopleState", arr show . peopleState), 
                            ("percentInfected", arr show . percentInfected)]
 
--- generates a wire out of a map of statistics wires by pretty-printing the statistics and their names
-processStatistics :: Statistics a -> OutputWire a String
-processStatistics stats = 
-    mkPure $ \dt input -> 
-        let results = Map.map (\val -> stepWireP val dt input) stats
-            (_, rights) = Map.mapEither fst results
-            stats' = Map.map snd results
-            output = unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights
-        in (Right output, processStatistics stats')
-        
+observers = [(processStatistics statistics, stdout)]
 
-control whenInhibited whenProduced wire = loop wire (counterSession 0.2) where
-    loop w' session' = do
-      (mx, w, session) <- stepSessionP w' session' ()
-      case mx of 
-        Left ex -> whenInhibited ex
-        Right x -> do whenProduced x
-                      loop w session
 main = do 
-  n <- readLn
-  control return (putStrLn) $ (forI n . processStatistics statistics . model)
+  t <- readLn
+  runModelIO (for t . model) observers 0.2
 
 
 -- ----------------------
