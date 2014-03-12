@@ -25,12 +25,12 @@ import Syntax
 
 -- LEXICAL ISSUES
 agentKeyword = "agent"
-variableKeyword = "reactive"
+attributeKeyword = "reactive"
 populationKeyword = "population"
 removalKeyword = "removal"
 additionKeyword = "addition"
 networkKeyword = "network"
-keywords = [agentKeyword, variableKeyword, populationKeyword, removalKeyword, networkKeyword] 
+keywords = [agentKeyword, attributeKeyword, populationKeyword, removalKeyword, networkKeyword] 
 
 eol = try (string "\n\r") <|> string "\n" <?> "expected end of line"
 line = many (noneOf "\n\r") <* eol
@@ -44,25 +44,33 @@ indentedLine = do
 
 -- | parses a full Frabjous program from the given string
 parseProgram :: String -> Either ParseError Program
-parseProgram = parse program "unknown"
+parseProgram = runParser program emptyProgram "unknown"
 
-program :: GenParser Char st Program
-program = Program <$> many block
+type ProgramParser = GenParser Char Program
+program :: ProgramParser Program
+program = do 
+  many block
+  getState
 
--- reads any number of whitespace /comments followed by a Block
-block :: GenParser Char st Block
+-- reads any number of whitespace /comments followed by a block
+block :: ProgramParser ()
 block = do
   whiteSpace
-  dec <- choice . map try $ [agentDec, variableDec, populationDec, networkDec, JustHaskell <$> haskellBlock]
+  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, justHaskell]
   return dec
 
 
-haskellBlock :: GenParser Char st HaskellBlock
+justHaskell :: ProgramParser ()
+justHaskell = do
+  block <- haskellBlock
+  updateState (addCode block)
+
+haskellBlock :: ProgramParser HaskellBlock
 haskellBlock = do
   notFollowedBy (choice (map symbol keywords))
   fstLine <- line
   lines <- many (indentedLine)
-  return (HaskellBlock (unlines (fstLine : lines)))
+  return (HaskellBlock $ unlines (fstLine : lines))
 
 
 
@@ -79,16 +87,11 @@ whiteSpace = Token.whiteSpace lexer
 parens = Token.parens lexer
 
 
-
-
-
-
-agentDec :: GenParser Char st Block
 agentDec = do 
   symbol agentKeyword
-  id <- identifier
+  name <- identifier
   fields <- braces (commaSep1 field)
-  return (AgentDec id fields)
+  updateState (addAgent name (Agent fields))
 
 field = do
   fieldName <- identifier
@@ -98,19 +101,19 @@ field = do
   whiteSpace
   return (fieldName, cc ++ " " ++ ty)
 
-variableDec :: GenParser Char st Block
-variableDec = do 
-  symbol variableKeyword
-  id <- identifier
+
+attributeDec = do
+  symbol attributeKeyword
+  name <- identifier
   isReactiveSyntax <- (symbol "(t)" >> return True) <|> return False
   symbol "="
   code <- haskellBlock  
-  if (isReactiveSyntax) 
-  then return (VariableDec id (desugarReactiveSyntax code))
-  else return (VariableDec id code)
+  let attribute = if isReactiveSyntax
+                  then Attribute (desugarReactiveSyntax code)
+                  else Attribute code
+  updateState (addAttribute name attribute)
 
 
-populationDec :: GenParser Char st Block
 populationDec = do
   symbol populationKeyword
   name <- identifier
@@ -118,9 +121,9 @@ populationDec = do
   agent <- identifier
   r <- try removalDec <|> return (HaskellBlock "never")
   a <- try additionDec <|> return (HaskellBlock "never")
-  return (PopulationDec name agent r a)
+  updateState (addPopulation name (Population agent r a))
 
-removalDec, additionDec :: GenParser Char st HaskellBlock
+removalDec, additionDec :: ProgramParser HaskellBlock
 removalDec = do 
   symbol removalKeyword
   symbol "="
@@ -135,17 +138,23 @@ additionDec = do
 
 networkDec = do 
   symbol networkKeyword
-  p1 <- idPair
-  p2 <- optionMaybe (symbol "with" >> idPair)
-  symbol "by"
+  name <- identifier
+  symbol "between"
+  context <- symmetricContext -- TODO give options for asymmetric and bipartite networks as well
+  symbol "="
   code <- haskellBlock
-  return (NetworkDec p1 p2 code)
+  updateState (addNetwork name (Network {context = context, networkSpec = code}))
+         where symmetricContext = do
+                 a <- networkAccess
+                 symbol "in"
+                 p <- identifier
+                 return (Symmetric { population = p, access = a})
   
-
-idPair = do
-  i1 <- identifier
-  i2 <- identifier
-  return (i1, i2)
+networkAccess :: GenParser Char st NetworkAccess
+networkAccess = do
+  Just link <- fmap readLink identifier
+  name <- identifier
+  return (link, name)
 
 
 -- | desugars the rhs of a variable declaration using the (t) syntax

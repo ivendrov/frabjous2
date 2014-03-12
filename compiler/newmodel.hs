@@ -18,6 +18,7 @@ import Data.Either (rights)
 import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
 import System.IO
+import System.Environment (getArgs)
 
 
 import StandardLibrary
@@ -147,6 +148,9 @@ model = createModel modelStructure initialState (mkStdGen 3)
 observers = [(processStatistics statistics, stdout)]
 
 main = do 
-  t <- readLn
-  step <- readLn
-  runModelIO (for t . model) observers step
+  args <- getArgs
+  if length args < 2 
+  then putStrLn "Call with two arguments, duration and timestep"
+  else do
+      let [t, step] = map read args
+      runModelIO (for t . model) observers step
