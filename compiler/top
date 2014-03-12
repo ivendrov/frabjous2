@@ -1,28 +1,38 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE Arrows #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+
 
 module Main where
 
--- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding (map, zipWith, length, filter, replicate, takeWhile, 
-                       (.), id, unzip, all, any, zipWith3, (++), sum)
-import Control.Monad hiding (when)
-import Control.Arrow
-import Control.Wire
-import Text.Printf
-import qualified Data.List as List
-import Data.Vector hiding (modify)
-import Data.Ord
-import Data.Monoid
-import Data.Graph
-import Data.Label (fclabels, mkLabels, get, set, modify, (:->))
-import Data.Typeable
-import Control.Wire.Classes
+import Control.Wire hiding (getRandom)
+import Control.Monad hiding (when, mapM, sequence)
+import Control.Monad.Random hiding (fromList)
+import Control.Monad.Identity (Identity)
 
-import Frabjous
+-- NOTE: by default, sequence operations are VECTOR ones
+import Prelude hiding ((.), id, mapM, sequence)
+import Control.Arrow
+import qualified Data.List as List
+import Data.Either (rights)
+import qualified Data.Traversable as Traversable
+import Control.Wire.Classes
+import System.IO
+
+
+import StandardLibrary
+import InternalLibrary
+
+
+import Data.Map (Map, (!))
+import qualified Data.Map as Map
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
+import Data.IntSet (IntSet)
+import qualified Data.IntSet as IntSet
+
 
 -- START GENERATED CODE
+
+
 

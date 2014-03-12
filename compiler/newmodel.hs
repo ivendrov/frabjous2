@@ -1,12 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE Arrows #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 
+
+module Main where
 
 import Control.Wire hiding (getRandom)
 import Control.Monad hiding (when, mapM, sequence)
@@ -16,14 +13,8 @@ import Control.Monad.Identity (Identity)
 -- NOTE: by default, sequence operations are VECTOR ones
 import Prelude hiding ((.), id, mapM, sequence)
 import Control.Arrow
-import Text.Printf
 import qualified Data.List as List
-import Data.Ord
-import Data.Monoid
-import Data.Graph
 import Data.Either (rights)
-import Data.Label (fclabels, mkLabels, get, set, modify, (:->))
-import Data.Typeable
 import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
 import System.IO
@@ -40,6 +31,8 @@ import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 
+
+
 -- START GENERATED CODE
 
 data State = S | I | R deriving (Eq, Show)
@@ -55,40 +48,48 @@ people = (Map.! "people") . populations
 nbhds = (Map.! "nbhds") . populations
 neighboursNetwork = (Map.! "neighboursNetwork") . networks
 
-income = function (getIncome . prevState)
-state = function (getState . prevState)
-neighbours i = function (\s -> view1 (neighboursNetwork . modelState $ s) i (collection .people . modelState $ s))
 
-stateWire i = statechart state transitions
-  where infectionRatePerPerson = 0.4
-        calcInfectionRate = proc input -> do
-                              nbs <- neighbours i-< input 
-                              returnA -< infectionRatePerPerson * 
-                                          (fromIntegral (length (filter (==I) (map getState nbs))))
-        transitions state = 
-              case state of 
-                     S -> pure I . rate . calcInfectionRate
-                     I -> pure R . after 3
-                     R -> pure S . after 3
- 
-incomeWire i =  proc input -> do { __0 <- income -< input ; returnA -< ( __0 * 3) } 
-avgIncomeWire i = pure 0 -- function (averageIncome . getResidents) 
-    where averageIncome people = (sum . map (getIncome) $ people) 
-                                  / fromIntegral (length people) 
+-- REFACTOR THE BELOW
+
+
  
 
 
-personWire g id = purifyRandom (helper (stateWire id) (incomeWire id)) g where
+personWire g id = purifyRandom (helper stateWire incomeWire) g where
            helper stateWire incomeWire =
               mkGen $ \dt x -> do
                 (Right stateNew, stateWire') <- stepWire stateWire dt x
                 (Right incomeNew, incomeWire') <- stepWire incomeWire dt x
                 return (Right $ (prevState x) {getState = stateNew, getIncome = incomeNew}, helper stateWire' incomeWire')
-nbhdWire g id = purifyRandom (helper (avgIncomeWire id)) g where
+           income = function (getIncome . prevState)
+           state = function (getState . prevState)
+           neighbours = function (\s -> view1 (neighboursNetwork . modelState $ s) id (collection .people . modelState $ s))
+
+           stateWire = statechart state transitions
+               where infectionRatePerPerson = 0.4
+                     calcInfectionRate = proc input -> do
+                                           nbs <- neighbours -< input 
+                                           returnA -< infectionRatePerPerson * 
+                                                       (fromIntegral (length (filter (==I) (map getState nbs))))
+                     transitions state = 
+                         case state of 
+                           S -> pure I . rate . calcInfectionRate
+                           I -> pure R . after 3
+                           R -> pure S . after 3
+ 
+           incomeWire = proc input -> do { __0 <- income -< input ; returnA -< ( __0 * 3) } 
+
+
+
+
+nbhdWire g id = purifyRandom (helper avgIncomeWire) g where
            helper avgIncomeWire =
               mkGen $ \dt x -> do
                 (Right avgIncomeNew, avgIncomeWire') <- stepWire avgIncomeWire dt x
                 return (Right $ (prevState x) {getAvgIncome = avgIncomeNew}, helper avgIncomeWire')
+           
+           avgIncomeWire = pure 0 -- function (averageIncome . getResidents) 
+               where averageIncome people = (sum . map (getIncome) $ people) / fromIntegral (length people) 
 
 peopleRemove = never -- arr (IntMap.keysSet . IntMap.filter (\p -> getState p == R) . collection . people) 
 peopleAdd = never --pure [Person {getState = S, getIncome = 0}] . rate . 1
@@ -115,7 +116,7 @@ percentInfected = arr (\state -> fromIntegral (length (filter (==I) state)) / fr
 
 statistics :: Statistics Agent 
 statistics = Map.fromList [--("_time", arr show . time),
-                           --("peopleState", arr show . peopleState), 
+                           ("peopleState", arr show . peopleState), 
                            ("percentInfected", arr show . percentInfected)]
 
 
@@ -129,11 +130,11 @@ startingPopulations =
 
 personDistribution = do
   income <- uniform (0, 10)
-  state <- frequencies [(I, 0.2), (S, 0.9), (R, 0)]
+  state <- frequencies [(I, 0.2), (S, 0.8), (R, 0)]
   return (Person {getIncome = income, 
                   getState =  state})
 
-startingPeople = draw 100 personDistribution
+startingPeople = draw 10 personDistribution
 
 startingNbhds = draw 5 (return (Nbhd 0))
 
