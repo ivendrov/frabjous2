@@ -10,7 +10,7 @@ model: compiler top bottom thim.fj
 	ghc model.hs
 
 output: compiler model
-	./model <<< "30" > output2
+	./model 10 0.1  > output2
 	diff output1 output2
 
 clean:
