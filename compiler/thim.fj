@@ -9,34 +9,34 @@ data State = S | I | R deriving (Eq, Show)
 
 
 agent Person { income:: Double, 
-      	       state :: State,
-	       neighbours :: Vector Person,
-	       nbhd :: Nbhd
+      	       state :: State
 	     }
 
 reactive state = statechart state transitions
   where infectionRatePerPerson = 0.4
-        calcInfectionRate :: Person -> Double
-        calcInfectionRate p = infectionRatePerPerson * 
-                             (fromIntegral (length (filter (==I) (map (getState) (getNeighbours p)))))
+        calcInfectionRate = proc input -> do
+                                           nbs <- neighbors -< input 
+                                           returnA -< infectionRatePerPerson * 
+                                                       (fromIntegral (length (filter (==I) (map getState nbs))))
         transitions state = 
               case state of 
-                     S -> pure I . rate . arr (calcInfectionRate) 
+                     S -> pure I . rate . calcInfectionRate
                      I -> pure R . after 3
                      R -> pure S . after 3
 
 
-reactive income(t) = income(t) * 3
+--reactive income(t) = income(t) * 3
+
+reactive income = income
 
 
-agent Nbhd { avgIncome :: Double,
-      	     residents :: Vector Person
+agent Nbhd { avgIncome :: Double
            } 
-
-reactive avgIncome = arr (averageIncome . getResidents) 
+{-
+reactive avgIncome = arr (averageIncome) . residents
     where averageIncome people = (sum . map (getIncome) $ people) 
                                   / fromIntegral (length people)
-
+-}
 
 population people of Person
 removal = arr (filter (\p -> getState p == R))
