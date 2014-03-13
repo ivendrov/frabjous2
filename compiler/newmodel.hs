@@ -116,7 +116,9 @@ statistics = Map.fromList [--("_time", arr show . time),
 
 -- INITIAL STATE
 
-initialState = liftM2 InitialState startingPopulations startingNetworks
+initialState = do 
+  startingPops <- startingPopulations
+  return $ InitialState startingPops startingNetworks
 
 startingPopulations = 
     Traversable.sequence $ 
@@ -132,7 +134,7 @@ startingPeople = draw 10 personDistribution
 
 startingNbhds = draw 5 (return (Nbhd 0))
 
-startingNetworks = return $ Map.fromList [("neighboursNetwork", randomSymmetricNetwork 0.2)]
+startingNetworks = Map.fromList [("neighboursNetwork", randomSymmetricNetwork 0.2)]
 
 
 -- OUTPUT

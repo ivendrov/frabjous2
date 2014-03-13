@@ -46,4 +46,4 @@ population nbhds of Nbhd
 
 
 
-network nbhdNetwork between many neighbors in people = randomSymmetricNetwork 0.2 
+network nbhdNetwork between many neighbors in people = poissonRandomSymmetric 0.2 
