@@ -31,7 +31,10 @@ removalKeyword = "removal"
 additionKeyword = "addition"
 networkKeyword = "network"
 statisticKeyword = "statistic"
-keywords = [agentKeyword, attributeKeyword, populationKeyword, removalKeyword, networkKeyword, statisticKeyword] 
+initialKeyword = "initialState"
+keywords = [agentKeyword, attributeKeyword, populationKeyword, 
+            removalKeyword, networkKeyword, statisticKeyword,
+           initialKeyword] 
 
 eol = try (string "\n\r") <|> string "\n" <?> "expected end of line"
 line = many (noneOf "\n\r") <* eol
@@ -50,14 +53,15 @@ parseProgram = runParser program emptyProgram "unknown"
 type ProgramParser = GenParser Char Program
 program :: ProgramParser Program
 program = do 
-  many block
+  many (try block)
   getState
 
 -- reads any number of whitespace /comments followed by a block
 block :: ProgramParser ()
 block = do
   whiteSpace
-  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, statisticDec, justHaskell]
+  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, statisticDec, initialState,
+                             justHaskell]
   return dec
 
 
@@ -164,6 +168,18 @@ statisticDec = do
   code <- haskellBlock
   updateState (addStatistic name code)
 
+initialState = do
+  symbol initialKeyword
+  bindings <- braces (commaSep1 binding)
+  updateState (addInitial bindings)
+  
+binding = do 
+  whiteSpace
+  name <- identifier
+  symbol "="
+  code <- many (noneOf ",{}")
+  return (name, HaskellBlock code)
+  
 
 
 -- | desugars the rhs of a variable declaration using the (t) syntax

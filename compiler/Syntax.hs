@@ -50,6 +50,7 @@ data Program = Program { agents :: Map Name Agent,
                          populations :: Map Name Population,
                          networks :: Map Name Network,
                          statistics :: Map Name HaskellBlock,
+                         initial :: Map Name HaskellBlock,
                          otherCode :: [HaskellBlock]} deriving (Show)
 
 emptyProgram = Program { agents = Map.empty,
@@ -57,6 +58,7 @@ emptyProgram = Program { agents = Map.empty,
                          populations = Map.empty,
                          networks = Map.empty,
                          statistics = Map.empty,
+                         initial = Map.empty,
                          otherCode = []}
 
 addAgent name agent program = program { agents = Map.insert name agent (agents program) }
@@ -64,4 +66,7 @@ addAttribute name attribute program = program { attributes = Map.insert name att
 addPopulation name population program = program {populations = Map.insert name population (populations program) }
 addNetwork name network program = program { networks = Map.insert name network (networks program) }
 addStatistic name statistic program = program { statistics = Map.insert name statistic (statistics program) }
+addInitial initials program = if Map.null (initial program)
+                              then program { initial = Map.fromList initials }
+                              else error "initial state specified twice"
 addCode code program = program { otherCode = otherCode program ++ [code] }

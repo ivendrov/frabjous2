@@ -31,7 +31,9 @@ capitalize (h : t) = toUpper h : t
 
 
 generateCode :: Program -> String
-generateCode (Program agents attributes populations networks statistics othercode) =         
+generateCode (Program agents attributes populations networks statistics initial othercode) = 
+    if (Map.null initial) then error "no initial state specified!"
+    else
         unlines [unlines (map contents othercode),
                 showAgentDeclaration agents,
                 showPopulationDeclarations (Map.keys populations),
@@ -39,7 +41,8 @@ generateCode (Program agents attributes populations networks statistics othercod
                 unlines (map (showAgentWire (Map.map agent populations) (Map.map context networks) attributes)
                              (Map.toList agents)),
                 showModelStructure populations networks,
-                showStats statistics]
+                showStats statistics,
+                showInitialState populations networks initial]
 
 showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
@@ -151,5 +154,19 @@ showStats :: Map Name HaskellBlock -> String
 showStats statistics = unlines (mainDec : statDecs) where
     mainDec = "statistics = " ++ toMap ("arr show . "++) (Map.keys statistics)
     statDecs = zipWith (printf "%s = %s") (Map.keys statistics) (map contents (Map.elems statistics))
+
+
+showInitialState populations networks initials = prettify $
+    printf "initialState = do {startingPops <- startingPopulations; \
+                               \return $ InitialState startingPops startingNetworks} where %s"
+    (genDecs initialDecs) where
+        initialDecs = startingPops : startingNetworks : decs                         
+        startingPops = "startingPopulations = Traversable.sequence $ "
+                       ++ toMap (++"Initial") (Map.keys populations)
+        startingNetworks = "startingNetworks = " ++ toMap (++"Initial") (Map.keys networks)
+        decs =  map (uncurry (printf "%sInitial = %s")) (Map.toList (Map.map contents initials))
+
+                                                    
+
     
     
