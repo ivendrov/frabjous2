@@ -32,11 +32,7 @@ reactive income = income
 
 agent Nbhd { avgIncome :: Double
            } 
-{-
-reactive avgIncome = arr (averageIncome) . residents
-    where averageIncome people = (sum . map (getIncome) $ people) 
-                                  / fromIntegral (length people)
--}
+
 
 population people of Person
 removal = arr (filter (\p -> getState p == R))
@@ -47,3 +43,8 @@ population nbhds of Nbhd
 
 
 network nbhdNetwork between many neighbors in people = poissonRandomSymmetric 0.2 
+
+
+statistic peopleState = function (map getState . IntMap.elems . collection . people)
+
+statistic percentInfected = function (\states -> fromIntegral (length (filter (==I) states)) / fromIntegral (length states) . peopleState)

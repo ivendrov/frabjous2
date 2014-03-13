@@ -49,16 +49,19 @@ data Program = Program { agents :: Map Name Agent,
                          attributes :: Map Name Attribute,
                          populations :: Map Name Population,
                          networks :: Map Name Network,
+                         statistics :: Map Name HaskellBlock,
                          otherCode :: [HaskellBlock]} deriving (Show)
 
 emptyProgram = Program { agents = Map.empty,
                          attributes = Map.empty,
                          populations = Map.empty,
                          networks = Map.empty,
+                         statistics = Map.empty,
                          otherCode = []}
 
 addAgent name agent program = program { agents = Map.insert name agent (agents program) }
 addAttribute name attribute program = program { attributes = Map.insert name attribute (attributes program) }
 addPopulation name population program = program {populations = Map.insert name population (populations program) }
 addNetwork name network program = program { networks = Map.insert name network (networks program) }
+addStatistic name statistic program = program { statistics = Map.insert name statistic (statistics program) }
 addCode code program = program { otherCode = otherCode program ++ [code] }

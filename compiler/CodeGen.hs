@@ -31,14 +31,15 @@ capitalize (h : t) = toUpper h : t
 
 
 generateCode :: Program -> String
-generateCode (Program agents attributes populations networks othercode) =         
+generateCode (Program agents attributes populations networks statistics othercode) =         
         unlines [unlines (map contents othercode),
                 showAgentDeclaration agents,
                 showPopulationDeclarations (Map.keys populations),
                 showNetworkDeclarations (Map.keys networks),
                 unlines (map (showAgentWire (Map.map agent populations) (Map.map context networks) attributes)
                              (Map.toList agents)),
-                showModelStructure populations networks]
+                showModelStructure populations networks,
+                showStats statistics]
 
 showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
@@ -64,6 +65,9 @@ linearize x = case Transform.linearizeDecl x of
 prettify x = case Transform.prettifyDecl x of
                Left err -> error err 
                Right str -> str
+
+toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op) where
+    pair op name = printf "(%s, %s)" (show name) (op name)
 
 -- END HELPERS
 -- showAgentWire populations networks attributes agent
@@ -111,8 +115,6 @@ showModelStructure populations networks = prettify $
     printf "modelStructure = ModelStructure { %s } where %s " (intercalate ", " components) (genDecs wires) where
         populationNames = Map.keys populations
         networkNames = Map.keys networks
-        toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op)
-        pair op name = printf "(%s, %s)" (show name) (op name)
         components = map (uncurry (printf "%s = %s")) pairs
         pairs = [("populationNames", show populationNames),
                  ("networkNames", show networkNames),
@@ -134,8 +136,6 @@ showModelStructure populations networks = prettify $
                               Bipartite {population1, population2, ..} -> printf "%sWire %s %s" name 
                                                                           population1 population2
 
-
-
         wires = removalWires ++ additionWires ++ networkWires
         removalWires = map removalWire (Map.toList populations)
         additionWires = map additionWire (Map.toList populations)
@@ -146,3 +146,10 @@ showModelStructure populations networks = prettify $
             linearize (printf "%sAdd = %s" name (contents (addition (population))))
         networkWire (name, network) = 
             linearize (printf "%sWire = %s" name (contents (networkSpec network)))
+
+showStats :: Map Name HaskellBlock -> String
+showStats statistics = unlines (mainDec : statDecs) where
+    mainDec = "statistics = " ++ toMap ("arr show . "++) (Map.keys statistics)
+    statDecs = zipWith (printf "%s = %s") (Map.keys statistics) (map contents (Map.elems statistics))
+    
+    

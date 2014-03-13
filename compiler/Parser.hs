@@ -30,7 +30,8 @@ populationKeyword = "population"
 removalKeyword = "removal"
 additionKeyword = "addition"
 networkKeyword = "network"
-keywords = [agentKeyword, attributeKeyword, populationKeyword, removalKeyword, networkKeyword] 
+statisticKeyword = "statistic"
+keywords = [agentKeyword, attributeKeyword, populationKeyword, removalKeyword, networkKeyword, statisticKeyword] 
 
 eol = try (string "\n\r") <|> string "\n" <?> "expected end of line"
 line = many (noneOf "\n\r") <* eol
@@ -56,7 +57,7 @@ program = do
 block :: ProgramParser ()
 block = do
   whiteSpace
-  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, justHaskell]
+  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, statisticDec, justHaskell]
   return dec
 
 
@@ -155,6 +156,14 @@ networkAccess = do
   Just link <- fmap readLink identifier
   name <- identifier
   return (link, name)
+
+statisticDec = do
+  symbol statisticKeyword
+  name <- identifier
+  symbol "=" 
+  code <- haskellBlock
+  updateState (addStatistic name code)
+
 
 
 -- | desugars the rhs of a variable declaration using the (t) syntax
