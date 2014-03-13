@@ -264,6 +264,8 @@ instance Network ManyToMany where
     toEdges = toEdges . fst
     fromEdges vertices1 vertices2 = fromEdges vertices1 vertices1 &&& fromEdges vertices2 vertices2 . map swap
 
+networkView id viewer networkAccess populationAccess = 
+    arr (\s -> viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s))
 
 
 -- C) The model as a whole

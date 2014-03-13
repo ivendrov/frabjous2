@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  CodeGen
@@ -17,9 +18,10 @@ import Data.List
 import Data.Function (on)
 import Text.Printf (printf)
 import Data.Char (toUpper)
+import Data.Map (Map, (!))
+import qualified Data.Map as Map
 
-import qualified Syntax
-import Analyzer
+import Syntax
 import qualified Transform
 
 -- capitalizes the first letter of a given attribute
@@ -27,72 +29,119 @@ capitalize [] = []
 capitalize (h : t) = toUpper h : t
 
 
-generateCode :: FrabjousModel -> String
-generateCode (FrabjousModel agents attributes localAttributeNames globals populations networks othercode) = 
-    let mkLabelsStr = printf "mkLabels [ %s ]\n" (intercalate ", " (map ("''"++) agentNames)) 
-        agentNames = map (name) agents
-        
-    in unlines [othercode,
-                concatMap showAgentDeclaration agents, 
-                mkLabelsStr,  
-                concatMap (\n -> printf "get%s = get %s\n" (capitalize n) n) localAttributeNames,
-                unlines . map (showAttribute localAttributeNames) $ attributes,
-                concatMap showAgentInstance agents,
-                showModelDecs populations,
-                showInitialState populations,
-                showModelEvolution populations networks]
+generateCode :: Program -> String
+generateCode (Program agents attributes populations networks othercode) =         
+        unlines [unlines (map contents othercode),
+                showAgentDeclaration agents,
+                showPopulationDeclarations (Map.keys populations),
+                showNetworkDeclarations (Map.keys networks),
+                unlines (map (showAgentWire (Map.map agent populations) (Map.map context networks) attributes)
+                             (Map.toList agents)),
+                showModelStructure populations networks]
+                                        
 
 
 
-showAgentDeclaration :: Agent -> String
-showAgentDeclaration (Agent name attributes _) = 
-    printf "data %s = %s { %s } deriving Typeable\n" 
-                 name 
-                 name 
-                 (intercalate ", " . map (showAttr) $ attributes')
-          where showAttr (name, str) = printf "_%s %s" name str
-                attributes' = attributes ++ [("idx" ++ name, ":: Int")]-- add index attribute
-      
 
-showAttribute :: [String] -> Attribute -> String
-showAttribute attributeNames (Attribute name (Syntax.HaskellBlock code)) = 
-    printf "%sWire = \n let {%s} \n in %s " name (intercalate ";" (map showBinding attributeNames)) code  where
-        showBinding name = printf "%s = function (get%s)" name (capitalize name)
+showAgentDeclaration :: Map Name Agent -> String
+showAgentDeclaration agents = 
+    let showAgent (name, (Agent attributes)) = 
+            printf "%s { %s }" name (intercalate ", " . map (showAttr) $ attributes)
+        showAttr (name, str) = printf "get%s %s" (capitalize name) str
+    in printf "data Agent = %s deriving Show\n" 
+       (intercalate " | " . map (showAgent) $ Map.toList agents)
+ 
+showPopulationDeclarations = unlines . map showDec where
+    showDec n = printf "%s = (Map.! \"%s\") . populations" n n
+
+showNetworkDeclarations = unlines . map showDec where
+    showDec n = printf "%s = (Map.! \"%s\") . networks" n n
+                             
+-- HELPERS 
+genDecs :: [String] -> String
+genDecs strs = printf "{ %s }" (intercalate "; " strs)
+linearize x = case Transform.linearizeDecl x of
+                 Left err -> error err
+                 Right str -> str
+
+prettify x = case Transform.prettifyDecl x of
+               Left err -> error err 
+               Right str -> str
+
+-- END HELPERS
+-- showAgentWire populations networks attributes agent
+-- 
+showAgentWire :: Map Name Name -> Map Name NetworkContext -> Map Name Attribute -> (Name, Agent) -> String
+showAgentWire populations networks attributes (name, Agent fields)  = prettify $
+    printf "wire%s g id = purifyRandom (helper %s) g where %s"
+           name (unwords localWireNames) (genDecs localDecs)
+    where fromRight (Right x) = x 
+          fieldNames = map fst fields
+          activeFieldNames = Map.keys agentAttributes
+          localWireNames = map (printf "%sWire") activeFieldNames
+          localDecs = [helper] ++ env ++ localWires
+
+          -- the helper declaration
+          helper = printf "helper %s = mkGen $ \\dt x -> do { %s ; return (Right $ (prevState x) %s, helper %s)}"
+                   (unwords localWireNames) stepLocalWires updateAttributes (unwords (map (++"'") localWireNames))
+          stepLocalWires = intercalate ";" (map stepLocalWire activeFieldNames)
+          stepLocalWire name = printf "(Right %sNew, %sWire') <- stepWire %sWire dt x" name name name
+          updateAttributes = if null activeFieldNames 
+                             then "" 
+                             else printf "{ %s }" (intercalate "," (map updateAttribute activeFieldNames))
+          updateAttribute name = printf "get%s = %sNew" (capitalize name) name
+
+          -- the environment
+          env = map mkWire fieldNames ++ networkAttributes
+          mkWire name = printf "%s = function (get%s . prevState)" name (capitalize name)
+          networkAttributes = concatMap extractAttributes (Map.toList networks)
+          extractAttributes :: (Name, NetworkContext) -> [String]
+          extractAttributes (networkName, Symmetric {population = population , access = (_, accessName)}) = 
+              if populations Map.! population == name
+              then [printf "%s = networkView id view1 %s %s" accessName networkName population]
+              else []
+          -- TODO add cases for other network types
+
+          -- the local wires
+          agentAttributes = Map.filterWithKey (\name _ -> name `elem` fieldNames) attributes
+          localWires = map localWire (Map.toList agentAttributes)
+          localWire (attribute, Attribute (HaskellBlock (code))) = 
+              linearize (attribute ++ "Wire = " ++ code)
+
+   
+showModelStructure :: Map Name Population -> Map Name Network -> String
+showModelStructure populations networks = prettify $
+    printf "modelStructure = ModelStructure { %s } where %s " (intercalate ", " components) (genDecs wires) where
+        populationNames = Map.keys populations
+        networkNames = Map.keys networks
+        toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op)
+        pair op name = printf "(%s, %s)" (show name) (op name)
+        components = map (uncurry (printf "%s = %s")) pairs
+        pairs = [("populationNames", show populationNames),
+                 ("networkNames", show networkNames),
+                 ("removalWires", toMap  (++"Remove") populationNames),
+                 ("additionWires", toMap (++"Add") populationNames),
+                 ("newAgentWires", toMap (("wire"++) . agent . (populations !)) populationNames),
+                 ("networkEvolutionWires", toMap (++"Wire") networkNames),
+                 ("networkPopulations", toMap (show . getPops . context . (networks !)) networkNames)]
+        getPops :: NetworkContext -> (Name, Name)
+        getPops (Symmetric {population, access}) = (population, population)
+        getPops (Asymmetric {population, access1, access2}) = (population, population)
+        getPops (Bipartite {population1, population2, access1, access2}) = (population1, population2)
+
+        wires = removalWires ++ additionWires ++ networkWires
+        removalWires = map removalWire (Map.toList populations)
+        additionWires = map additionWire (Map.toList populations)
+        networkWires = map networkWire (Map.toList networks)
+        removalWire (name, population) = 
+            linearize (printf "%sRemove = %s" name (contents (removal (population))))
+        additionWire (name, population) = 
+            linearize (printf "%sAdd = %s" name (contents (addition (population))))
+        networkWire (name, network) = 
+            linearize (printf "%sWire = %s" name (contents (networkSpec network)))
 
 
-    
-
-
-
--- showAgentInstance prints the instance declarations for a given agent,
--- including the code for the agent's local change wire
--- (note that the actual definitions of attributes are not YET done here - TODO?)
-showAgentInstance :: Agent -> String
-showAgentInstance (Agent name _ attributes) = 
-            printf "instance Agent %s where \n\
-                   \    idx = idx%s\n\
-                   \    localChangeWire = helper %s where\n\
-                   \           helper %s =\n\
-                   \              mkGen $ \\dt x -> do\n%s\
-                   \                return (Right $ x {%s},\
-                                   \ helper %s)\n"
-                   name 
-                   name
-                   (intercalate " " wireNames)
-                   (intercalate " " wireNames)
-                   (concatMap wireEvolution varNames)
-                   fieldAssignments
-                   (intercalate " " newWireNames) where
-                       varNames = map varName attributes
-                       wireNames = map (++"Wire") varNames
-                       wireEvolution :: String -> String
-                       wireEvolution var = 
-                           printf "                (Right %sNew, %sWire') <- stepWire %sWire dt x\n"
-                                  var var var
-                       fieldAssignments = intercalate ", " . map (showField) $ varNames
-                       showField var = printf "_%s = %sNew" var var
-                       newWireNames = map (++"'") wireNames
-
+{-
 -- showModelDecs prints declarations for ModelState and ModelOutput
 -- currently just contains the population; later will contain global reactive variables also
 showModelDecs :: [Population] -> String
@@ -184,3 +233,4 @@ showModelEvolution populations networks =
                       case Transform.linearizeDecl (printf "network%d = %s" n code) of 
                         Just result -> result
                         Nothing -> error "could not parse network declaration"
+-}

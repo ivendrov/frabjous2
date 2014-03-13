@@ -49,13 +49,6 @@ people = (Map.! "people") . populations
 nbhds = (Map.! "nbhds") . populations
 neighboursNetwork = (Map.! "neighboursNetwork") . networks
 
-
--- REFACTOR THE BELOW
-
-
- 
-
-
 personWire g id = purifyRandom (helper stateWire incomeWire) g where
            helper stateWire incomeWire =
               mkGen $ \dt x -> do
@@ -64,7 +57,7 @@ personWire g id = purifyRandom (helper stateWire incomeWire) g where
                 return (Right $ (prevState x) {getState = stateNew, getIncome = incomeNew}, helper stateWire' incomeWire')
            income = function (getIncome . prevState)
            state = function (getState . prevState)
-           neighbours = function (\s -> view1 (neighboursNetwork . modelState $ s) id (collection .people . modelState $ s))
+           neighbours = networkView id view1 neighboursNetwork people
 
            stateWire = statechart state transitions
                where infectionRatePerPerson = 0.4
@@ -92,12 +85,7 @@ nbhdWire g id = purifyRandom (helper avgIncomeWire) g where
            avgIncomeWire = pure 0 -- function (averageIncome . getResidents) 
                where averageIncome people = (sum . map (getIncome) $ people) / fromIntegral (length people) 
 
-peopleRemove = never -- arr (IntMap.keysSet . IntMap.filter (\p -> getState p == R) . collection . people) 
-peopleAdd = never --pure [Person {getState = S, getIncome = 0}] . rate . 1
-nbhdsRemove = never 
-nbhdsAdd = never
 
-neighboursNetworkWire = poissonRandomSymmetric 0.5 people
 
 
 modelStructure = ModelStructure {
@@ -108,7 +96,12 @@ modelStructure = ModelStructure {
                    newAgentWires = Map.fromList [("people", personWire), ("nbhds", nbhdWire)],
                    networkEvolutionWires = Map.fromList [("neighboursNetwork", neighboursNetworkWire)],
                    networkPopulations = Map.fromList [("neighboursNetwork", ("people", "people"))]
-                 }
+                 } where 
+    peopleRemove = never -- arr (IntMap.keysSet . IntMap.filter (\p -> getState p == R) . collection . people) 
+    peopleAdd = never --pure [Person {getState = S, getIncome = 0}] . rate . 1
+    nbhdsRemove = never 
+    nbhdsAdd = never
+    neighboursNetworkWire = poissonRandomSymmetric 0.5 people
 
 -- STATISTICS
 
