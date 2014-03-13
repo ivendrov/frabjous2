@@ -18,6 +18,7 @@ import Data.Either (rights)
 import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
 import System.IO
+import System.Environment (getArgs)
 
 
 import StandardLibrary

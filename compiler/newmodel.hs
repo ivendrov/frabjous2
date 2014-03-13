@@ -52,8 +52,8 @@ neighboursNetwork = (Map.! "neighboursNetwork") . networks
 personWire g id = purifyRandom (helper stateWire incomeWire) g where
            helper stateWire incomeWire =
               mkGen $ \dt x -> do
-                (Right stateNew, stateWire') <- stepWire stateWire dt x
                 (Right incomeNew, incomeWire') <- stepWire incomeWire dt x
+                (Right stateNew, stateWire') <- stepWire stateWire dt x
                 return (Right $ (prevState x) {getState = stateNew, getIncome = incomeNew}, helper stateWire' incomeWire')
            income = function (getIncome . prevState)
            state = function (getState . prevState)
@@ -105,13 +105,17 @@ modelStructure = ModelStructure {
 
 -- STATISTICS
 
-peopleState = arr (map getState . IntMap.elems . collection) . arr people
-percentInfected = arr (\state -> fromIntegral (length (filter (==I) state)) / fromIntegral (length state)) . peopleState
+
 
 statistics :: Statistics Agent 
 statistics = Map.fromList [--("_time", arr show . time),
                            ("peopleState", arr show . peopleState), 
                            ("percentInfected", arr show . percentInfected)]
+
+peopleState = function (map getState . IntMap.elems . collection . people)
+percentInfected = function (\states -> fromIntegral (length (filter (==I) states)) / 
+	     		       			    fromIntegral (length states))
+						    . peopleState
 
 
 -- INITIAL STATE
@@ -122,7 +126,7 @@ initialState = do
 
 startingPopulations = 
     Traversable.sequence $ 
-               Map.fromList [("people", startingPeople), ("nbhds", startingNbhds)]
+               Map.fromList [("nbhds", startingNbhds), ("people", startingPeople)]
 
 personDistribution = do
   income <- uniform (0, 10)
