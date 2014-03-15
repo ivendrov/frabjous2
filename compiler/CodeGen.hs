@@ -29,6 +29,10 @@ import qualified Transform
 capitalize [] = []
 capitalize (h : t) = toUpper h : t
 
+-- converts a field name to an accessor to be used inside of reactive declaration
+-- (currently converts "income" to "getIncome", for example
+toAccessor str = "get" ++ capitalize str
+
 
 generateCode :: Program -> String
 generateCode (Program agents attributes populations networks statistics initial othercode) = 
@@ -48,9 +52,14 @@ showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
     let showAgent (name, (Agent attributes)) = 
             printf "%s { %s }" name (intercalate ", " . map (showAttr) $ attributes)
-        showAttr (name, str) = printf "get%s %s" (capitalize name) str
+        showAttr (name, str) = printf "%s %s" name str
     in printf "data Agent = %s deriving Show\n" 
        (intercalate " | " . map (showAgent) $ Map.toList agents)
+       ++ showAttributeAccessors (concatMap (map fst . fields) $ Map.elems agents)
+
+showAttributeAccessors :: [Name] -> String
+showAttributeAccessors = unlines . map showAccessor where
+    showAccessor name = printf "%s = %s" (toAccessor name) name
  
 showPopulationDeclarations = unlines . map showDec where
     showDec n = printf "%s = (Map.! \"%s\") . populations" n n
@@ -93,7 +102,7 @@ showAgentWire populations networks attributes (name, Agent fields)  = prettify $
           updateAttributes = if null activeFieldNames 
                              then "" 
                              else printf "{ %s }" (intercalate "," (map updateAttribute activeFieldNames))
-          updateAttribute name = printf "get%s = %sNew" (capitalize name) name
+          updateAttribute name = printf "%s = %sNew" name name
 
           -- the environment
           env = map mkWire fieldNames ++ networkAttributes

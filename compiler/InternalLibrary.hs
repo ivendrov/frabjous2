@@ -377,7 +377,9 @@ processStatistics stats =
         let results = Map.map (\val -> stepWireP val dt input) stats
             (_, rights) = Map.mapEither fst results
             stats' = Map.map snd results
-            output = unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights
+            output = if (not $ Map.null stats')
+                     then (unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights) ++ "\n"
+                     else ""
         in (Right output, processStatistics stats')
 
 type ObserverProcess a = (ObserverWire a String, Handle)
@@ -393,7 +395,7 @@ runModelIO modelWire observers timestep = loop modelWire (map fst observers) whe
       case mx of 
         Left ex -> return ()
         Right x -> do let (outputs, wires') = stepWiresP wires timestep x
-                          genAction handle (Right str) = hPutStrLn handle str
+                          genAction handle (Right str) = hPutStr handle str
                           genAction handle (Left _) = return ()
                           actions = zipWith genAction handles outputs
                       Traversable.sequence actions
