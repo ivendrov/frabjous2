@@ -78,6 +78,10 @@ prettify x = case Transform.prettifyDecl x of
                Left err -> error err 
                Right str -> str
 
+desugar x = case Transform.desugarDecl x of 
+              Left err -> error err
+              Right str -> str
+
 toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op) where
     pair op name = printf "(%s, %s)" (show name) (op name)
 
@@ -119,7 +123,7 @@ showAgentWire populations networks attributes (name, Agent fields)  = prettify $
           agentAttributes = Map.filterWithKey (\name _ -> name `elem` fieldNames) attributes
           localWires = map localWire (Map.toList agentAttributes)
           localWire (attribute, Attribute (HaskellBlock (code))) = 
-              linearize (attribute ++ "Wire = " ++ code)
+              desugar (attribute ++ "Wire " ++ code)
 
    
 showModelStructure :: Map Name Population -> Map Name Network -> String

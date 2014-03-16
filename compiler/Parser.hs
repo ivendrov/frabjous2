@@ -10,7 +10,7 @@
 --
 -- The Parser for the Frabjous programming language
 --------------------------------------------------------------------------------------------------------------
-module Parser (parseProgram, parseDec) where
+module Parser (parseProgram) where
 
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
@@ -110,13 +110,8 @@ field = do
 attributeDec = do
   symbol attributeKeyword
   name <- identifier
-  isReactiveSyntax <- (symbol "(t)" >> return True) <|> return False
-  symbol "="
   code <- haskellBlock  
-  let attribute = if isReactiveSyntax
-                  then Attribute (desugarReactiveSyntax code)
-                  else Attribute code
-  updateState (addAttribute name attribute)
+  updateState (addAttribute name (Attribute code))
 
 
 populationDec = do
@@ -179,56 +174,3 @@ binding = do
   symbol "="
   code <- many (noneOf ",{}")
   return (name, HaskellBlock code)
-  
-
-
--- | desugars the rhs of a variable declaration using the (t) syntax
-desugarReactiveSyntax :: HaskellBlock -> HaskellBlock
-desugarReactiveSyntax (HaskellBlock contents) = HaskellBlock . show . parseDec $ contents
-
-
--- invariant : if you interleave otherExps with reactiveExps, you get back the original string
-data ReactiveDec = ReactiveDec { reactiveExps :: [String], 
-                                 otherExps :: [String]}
-
-instance Show ReactiveDec where
-    show (ReactiveDec rexps oexps) = {- fromJust . toOneLine $ -}
-        if (length rexps == 0) 
-        then (oexps !! 0)
-        else printf "proc input -> do { %s ; returnA -< (%s) }" decs finalExp where 
-                          finalExp =  helper 0 oexps
-                          helper :: Int -> [String] -> String
-                          helper n [exp] = exp 
-                          helper n (exp : exps) = exp ++ (printf " __%d " n) ++ helper (n+1) exps
-                          decs = intercalate ";" (zipWith genDec rexps [0..])
-                          genDec :: String -> Int -> String
-                          genDec rexp n = printf "__%d <- %s -< input" n rexp
-
-parseDec :: String -> ReactiveDec
-parseDec str = case parse reactiveDec "incorrect (t) syntax " str  of 
-                 Right dec -> dec
-                 Left err -> error (show err)
-
-reactiveDec :: GenParser Char st ReactiveDec
-reactiveDec = do
-  first <- manyTill anyChar (lookAhead . try $ reactiveExp) -- read string before first (t)
-  others <- many pairReactive -- read pairs of "reactive" and "other"
-  let (reactives, otherExps) = unzip others
-  return (ReactiveDec reactives (first : otherExps))
-
-pairReactive :: GenParser Char st (String, String)
-pairReactive = do
-  reactive <- reactiveExp
-  other <- manyTill anyChar ((lookAhead . try $ reactiveExp) <|> (eof >> return ""))
-  return (reactive, other)
-  
-
-reactiveExp = do
-  exp <- identifier <|> balancedParentheses
-  symbol "(t)"
-  return (printf "(%s)" exp)
-  
-balancedParentheses ::  GenParser Char st String 
-balancedParentheses = do 
-  exp <- parens (many (choice [try balancedParentheses, many1 (noneOf "()")]))
-  return (printf "(%s)" (concat exp))
