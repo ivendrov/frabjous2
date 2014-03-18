@@ -267,6 +267,10 @@ instance Network ManyToMany where
 networkView id viewer networkAccess populationAccess = 
     arr (\s -> viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s))
 
+agentPairs network pop1 pop2 = map peeps (toEdges network) where
+    peeps (id1, id2) = (collection pop1 IntMap.! id1, collection pop2 IntMap.! id2)
+    
+
 
 -- C) The model as a whole
 

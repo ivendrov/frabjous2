@@ -76,7 +76,7 @@ object Main extends App{
   def readString(obj : Obj, name : String) = obj.get(name).get.asInstanceOf[String]
   def readShape(obj: Obj) : DisplayObject = {
     val shape = if (readString(obj, "shape") == "line") 
-    					Line (readInt(obj, "x1"), readInt(obj, "x1"), readInt(obj, "x1"), readInt(obj, "x1"))
+    					Line (readInt(obj, "x1"), readInt(obj, "y1"), readInt(obj, "x2"), readInt(obj, "y2"))
     		    else 
     		    		Circle(readInt(obj, "x"), readInt(obj, "y"), readInt(obj, "r"))
     DisplayObject (shape, stringToColor(readString(obj, "color")))      
@@ -87,16 +87,19 @@ object Main extends App{
   val width = readDouble(fstLine, "width").toInt
   val panel = new MyPanel(height, width)
   val frame = new JFrame("Model Visualization")
+  frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
   frame.add(panel)
   frame.pack()
   frame.setVisible(true)
   
   
-  for (l <- lines){
-    val obj  = readObj(l)
-    panel.time = readDouble(obj, "time")
+  while(lines.hasNext){
+    Thread.sleep(100)
+    val obj  = readObj(lines.next())
+    panel.time += 1
     panel.objects = readArray(obj, "objects").map(readShape)
     frame.repaint()
   }
+  
   
 }

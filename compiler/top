@@ -3,11 +3,12 @@
 {-# LANGUAGE Arrows #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 
 module Main where
 
-import Control.Wire hiding (getRandom)
+import Control.Wire hiding (getRandom, object)
 import Control.Monad hiding (when, mapM, sequence)
 import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
@@ -21,6 +22,10 @@ import qualified Data.Traversable as Traversable
 import Control.Wire.Classes
 import System.IO
 import System.Environment (getArgs)
+import Data.Aeson
+import Data.Text (Text)
+import qualified Data.Vector as Vector
+import qualified Data.ByteString.Lazy as ByteString
 
 
 import StandardLibrary
@@ -35,7 +40,6 @@ import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 
 
--- START GENERATED CODE
 
 
 

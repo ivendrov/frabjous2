@@ -1,7 +1,7 @@
 -- OUTPUT
 model = createModel modelStructure initialState (mkStdGen 3)
 
-observers = [(processStatistics statistics, stdout)]
+observers = [{-(processStatistics statistics, stderr) , -} (toGUI, stdout)]
 
 main = do 
   args <- getArgs
@@ -10,3 +10,57 @@ main = do
   else do
       let [t, step] = map read args
       runModelIO (for t . model) observers step
+
+
+
+toGUI :: WireP (ModelOutput Agent) String
+toGUI = delay (toString initialJSON) . function (toString . toJSON)
+
+
+toString j = (map (toEnum . fromEnum) . ByteString.unpack . encode $ j) ++ "\n"
+
+initialJSON = object [ "height" .= height,
+	      	       "width" .= width ]
+
+
+
+radius :: Int
+radius = 10
+circle, line :: Text
+circle = "circle"
+line = "line"
+stateToColor :: State -> Text
+currentTime :: Double
+currentTime = 0.0
+black :: Text
+black = "black"
+stateToColor state = case state of 
+			S -> "yellow"
+			I -> "red"
+			R -> "blue"
+
+
+instance ToJSON Agent where
+	 toJSON (Person {x, y, state, ..}) = 
+	 	object [ "shape" .= circle
+		       , "x" .= x
+		       , "y" .= y
+		       , "r" .= radius
+		       , "color" .= stateToColor state ]
+
+toLine :: (Agent, Agent) -> Value
+toLine (Person {x = x1, y = y1, state = state1}, Person {x = x2, y = y2, state = state2}) = 
+       object [ "shape" .= line
+              , "x1" .= x1
+	      , "x2" .= x2
+	      , "y1" .= y1
+	      , "y2" .= y2 
+	      , "color" .= black]
+
+instance ToJSON (ModelOutput Agent) where
+	 toJSON m = 
+	 	let agents = IntMap.elems . collection . people $ m
+		    pairs = agentPairs (nbhdNetwork m) (people m) (people m)
+		    lines = map toLine pairs
+		    array = Array (Vector.fromList ( lines ++ map toJSON agents))
+		in object [ "objects" .= array]
