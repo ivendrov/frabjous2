@@ -19,7 +19,7 @@ reactive state = statechart state transitions
 
 population people of Person
 
-network nbhdNetwork between many neighbors in people = poissonRandomSymmetric 0.5
+network nbhdNetwork between many neighbors in people = distanceBased (euclidean [x, y]) 150
 
 width, height :: Double
 height = 500

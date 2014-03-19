@@ -21,7 +21,9 @@ module StandardLibrary
   -- NETWORKS
   randomNetwork,
   randomSymmetricNetwork,
-  poissonRandomSymmetric)
+  poissonRandomSymmetric,
+  distanceBased,
+  euclidean)
 where
 
 import InternalLibrary
@@ -32,6 +34,7 @@ import Control.Wire hiding (getRandom, MonadRandom, getRandomR)
 import Data.Monoid
 import Data.Tuple (swap)
 import Data.List
+import qualified Data.IntMap as IntMap
 
 
 -- 0. RANDOM NUMBERS 
@@ -106,6 +109,8 @@ statechart start transitions =
 -- 2. NETWORKS
 
 --  A) Library functions for creation 
+pairs xs = [(u, v) | u <- xs, v <- xs, u < v]
+
 
 randomNetwork, randomSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
 -- randomNetwork rng fraction size = a random network with the given integer vertices. 
@@ -137,6 +142,28 @@ poissonRandomSymmetric prob extractPop = helper where
              let v1 = indices . extractPop $ model
              network <- randomSymmetricNetwork prob v1 v1
              return (Right network, helper)
+
+distanceBased :: (a -> a -> Double) -> 
+                 Double -> 
+                (model -> ReactiveOutput a) -> 
+                    ModelWire model ManyToMany
+distanceBased d limit extractPop = function helper where
+    helper model = let pop = collection . extractPop $ model
+                       indices = IntMap.keys pop
+                       indexPairs = pairs indices
+                       withinDistance (i1, i2) = d (pop IntMap.! i1) (pop IntMap.! i2) < limit
+                   in fromEdges indices indices (filter withinDistance indexPairs)
+
+euclidean :: [a -> Double] -> a -> a -> Double
+euclidean accessors p1 p2 = 
+    let coords1 = map ($ p1) accessors
+        coords2 = map ($ p2) accessors
+        diffs = zipWith (-) coords1 coords2
+        sumSquares = sum $ map (^2) diffs        
+    in sqrt sumSquares
+                       
+                       
+                       
 
 
              
