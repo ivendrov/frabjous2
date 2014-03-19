@@ -1,0 +1,41 @@
+data State = S | I | R deriving (Eq, Show)
+
+agent Person { x :: Double,
+      	       y :: Double,
+      	       state :: State
+	     }
+
+reactive state = statechart state transitions
+  where infectionRatePerPerson = 0.4
+        calcInfectionRate t = infectionRatePerPerson * 
+			    (fromIntegral (length (filter (==I) (map getState (neighbors t)))))
+        transitions state = 
+              case state of 
+                     S -> pure I . rate . calcInfectionRate
+                     I -> pure R . after 3
+                     R -> pure S . after 3
+
+
+
+population people of Person
+
+network nbhdNetwork between many neighbors in people = poissonRandomSymmetric 0.5
+
+width, height :: Double
+height = 500
+width = 1000
+personDistribution = do
+  x <- uniform (0, width)
+  y <- uniform (0, height)
+  state <- frequencies [(I, 0.2), (S, 0.8), (R, 0)]
+  return (Person {..})
+
+
+statistic peopleState = function (map state . IntMap.elems . collection . people)
+ 
+initialState {
+	     people = draw 30 personDistribution,
+	     nbhdNetwork = randomSymmetricNetwork 0.2
+	     }
+
+
