@@ -5,6 +5,8 @@ agent Person { x :: Double,
       	       state :: State
 	     }
 
+reactive x = accum (+) initX . pure 1
+
 reactive state = statechart state transitions
   where infectionRatePerPerson = 0.4
         calcInfectionRate t = infectionRatePerPerson * 

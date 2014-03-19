@@ -33,6 +33,9 @@ capitalize (h : t) = toUpper h : t
 -- (currently converts "income" to "getIncome", for example
 toAccessor str = "get" ++ capitalize str
 
+-- converts a field name to the binding of its initial value
+toInit str = "init" ++ capitalize str
+
 
 generateCode :: Program -> String
 generateCode (Program agents attributes populations networks statistics initial othercode) = 
@@ -90,7 +93,7 @@ toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op) where
 -- 
 showAgentWire :: Map Name Name -> Map Name NetworkContext -> Map Name Attribute -> (Name, Agent) -> String
 showAgentWire populations networks attributes (name, Agent fields)  = prettify $
-    printf "wire%s g id = purifyRandom (helper %s) g where %s"
+    printf "wire%s g id initAgent = purifyRandom (helper %s) g where %s"
            name (unwords localWireNames) (genDecs localDecs)
     where fromRight (Right x) = x 
           fieldNames = map fst fields
@@ -109,7 +112,7 @@ showAgentWire populations networks attributes (name, Agent fields)  = prettify $
           updateAttribute name = printf "%s = %sNew" name name
 
           -- the environment
-          env = map mkWire fieldNames ++ networkAttributes
+          env = map mkWire fieldNames ++ networkAttributes ++ map initAttribute fieldNames
           mkWire name = printf "%s = function (get%s . prevState)" name (capitalize name)
           networkAttributes = concatMap extractAttributes (Map.toList networks)
           extractAttributes :: (Name, NetworkContext) -> [String]
@@ -118,6 +121,7 @@ showAgentWire populations networks attributes (name, Agent fields)  = prettify $
               then [printf "%s = networkView id view1 %s %s" accessName networkName population]
               else []
           -- TODO add cases for other network types
+          initAttribute name = printf "%s = %s initAgent" (toInit name) (toAccessor name)
 
           -- the local wires
           agentAttributes = Map.filterWithKey (\name _ -> name `elem` fieldNames) attributes

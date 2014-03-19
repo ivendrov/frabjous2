@@ -137,14 +137,14 @@ removeSet map set = foldr IntMap.delete map (IntSet.toList set)
 
 
 -- | generate a new agent with a new ID and random seed
-genNewAgent :: RandomGen g => (g -> ID -> AgentWire input a) -> RandT g (State ID) (ID, AgentWire input a)
-genNewAgent f = do 
+genNewAgent :: RandomGen g => (g -> ID -> a -> AgentWire input a) -> a -> RandT g (State ID) (ID, AgentWire input a)
+genNewAgent f initAgent = do 
   i <- State.get
   State.modify (+1)
   g <- getSplit
-  return (i, f g i)
+  return (i, f g i initAgent)
 
-genNewAgents n f = replicateM n (genNewAgent f)
+genNewAgents f initAgents = sequence (map (genNewAgent f) initAgents)
 
 type ModelMonad  = RandT StdGen (State ID)
 
@@ -169,7 +169,7 @@ type PopulationWire model a  =
 -- evolve the local properties of the population (unrelated to networks)
 -- i.e modify each agent locally, then apply death and birth 
 evolvePopulation :: (ModelOutput a -> ReactiveOutput a) ->
-                     (StdGen -> ID -> AgentWire (ModelOutput a) a) ->
+                     (StdGen -> ID -> a -> AgentWire (ModelOutput a) a) ->
                      PopulationState a ->
                         PopulationWire (ModelOutput a) a 
 evolvePopulation extractPop createAgent state = helper state where
@@ -183,7 +183,7 @@ evolvePopulation extractPop createAgent state = helper state where
                                                Right as -> as
               newAgents = case mnewAgents of Left _ -> []
                                              Right as -> as
-          newAgentWires <- genNewAgents (length newAgents) createAgent
+          newAgentWires <- genNewAgents createAgent newAgents
           let newAgentIndices = map fst newAgentWires
               output = ReactiveOutput {collection = (removeSet agents' deadAgents) `IntMap.union` 
                                                  IntMap.fromList (zip newAgentIndices newAgents),
@@ -307,7 +307,7 @@ mapZipWith3 f map1 map2 map3= Map.mapWithKey (\k -> f (map1 ! k) (map2 ! k)) map
 data ModelStructure a = ModelStructure { populationNames, networkNames :: [String],
                                          removalWires :: Map String (RemovalWire a),
                                          additionWires :: Map String (AdditionWire a),
-                                         newAgentWires :: Map String (StdGen -> ID -> AgentWire (ModelOutput a) a),
+                                         newAgentWires :: Map String (StdGen -> ID -> a -> AgentWire (ModelOutput a) a),
                                          networkEvolutionWires :: Map String (ModelWire (ModelOutput a) ManyToMany),
                                          networkPopulations :: Map String (String, String)}
 
@@ -326,8 +326,9 @@ data InitialState a = InitialState { initialPopulations :: Map String [a],
 
 initialModelState :: ModelStructure a -> InitialState a  -> ModelMonad (ModelState a, ModelOutput a)
 initialModelState structure initialState = do 
-  let initialCounts = Map.map length (initialPopulations initialState)
-  indexedPops <- Traversable.sequence (mapZipWith genNewAgents initialCounts (newAgentWires structure))
+
+  indexedPops <- Traversable.sequence (mapZipWith genNewAgents (newAgentWires structure) 
+                                                          (initialPopulations initialState))
   let ids =  Map.map (map fst) indexedPops
       wires = Map.map (map snd) indexedPops
       populationStates = mapZipWith3 PopulationState (Map.map IntMap.fromList indexedPops)
