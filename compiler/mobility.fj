@@ -5,8 +5,8 @@ agent Person { x :: Double,
       	       state :: State
 	     }
 
-reactive x = integrate initX . noise (uniform (-10, 10))    	     
-reactive y  = integrate initY . noise (uniform (-10, 10))
+reactive x = randomWalk initX (uniform (-10, 10))    	     
+reactive y  = randomWalk initY (uniform (-10, 10))
 
 reactive state = statechart state transitions
   where infectionRatePerPerson = 0.4
@@ -21,6 +21,7 @@ reactive state = statechart state transitions
 
 
 population people of Person
+-- addition = noise (draw 1 personDistribution) . rate . 1
 
 network nbhdNetwork between many neighbors in people = distanceBased (euclidean [x, y]) 150
 
@@ -37,7 +38,7 @@ personDistribution = do
 statistic peopleState = function (map state . IntMap.elems . collection . people)
  
 initialState {
-	     people = draw 30 personDistribution,
+	     people = draw 50 personDistribution,
 	     nbhdNetwork = randomSymmetricNetwork 0.2
 	     }
 

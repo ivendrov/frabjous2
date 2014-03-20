@@ -24,6 +24,7 @@ module StandardLibrary
   -- | accumulation & real numbers
   integrate,
   accumulate,
+  randomWalk,
   clip,
 
   -- | randomness
@@ -97,9 +98,16 @@ accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)
 
 -- | integrates its input with respect to time
 integrate :: Monad m => Double -> Wire e m Double Double
-integrate init = mkPure $ \dt x -> 
-                  let newVal = init + dt * x
-                  in newVal `seq` (Right newVal, integrate newVal)
+integrate = internalState (\dt x -> (+ dt*x))
+
+-- | performs a 1D random walk at the velocity specified by the given distribution
+randomWalk init distribution = integrate init . noise distribution
+
+-- | (TODO REFACTOR?) internalState applies the given transition function
+-- | to its state at every step, then outputs the state
+internalState transition init = mkState init $ \dt (x, state) -> 
+                                 let newState = transition dt x state
+                                 in newState `seq` (Right newState, newState)
 
 -- | the function 'clip' keeps its value in the given closed interval
 clip (a,b) x = if x < a then a
