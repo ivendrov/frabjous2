@@ -1,22 +1,20 @@
 data State = S | I | R deriving (Eq, Show)
 
-agent Person { x :: Double,
-      	       y :: Double,
-      	       state :: State
-	     }
+agent Person { 
+      x :: Double = randomWalk initX (uniform (-10, 10));
+      y :: Double = randomWalk initY (uniform (-10, 10));
+      state :: State 
+      	= statechart state transitions
+      	   where infectionRatePerPerson = 0.4
+          	 calcInfectionRate t = infectionRatePerPerson * 
+			    		(fromIntegral (length (filter (==I) (map getState (neighbors t)))))
+        	 transitions state = 
+              		case state of 
+                     	     S -> constant I . rate . calcInfectionRate
+                     	     I -> constant R . after 3
+                     	     R -> constant S . after 3
 
-reactive x = randomWalk initX (uniform (-10, 10))    	     
-reactive y  = randomWalk initY (uniform (-10, 10))
-
-reactive state = statechart state transitions
-  where infectionRatePerPerson = 0.4
-        calcInfectionRate t = infectionRatePerPerson * 
-			    (fromIntegral (length (filter (==I) (map getState (neighbors t)))))
-        transitions state = 
-              case state of 
-                     S -> constant I . rate . calcInfectionRate
-                     I -> constant R . after 3
-                     R -> constant S . after 3
+}
 
 
 
@@ -38,7 +36,7 @@ personDistribution = do
 statistic peopleState = function (map state . IntMap.elems . collection . people)
  
 initialState {
-	     people = draw 50 personDistribution,
+	     people = draw 5 personDistribution;
 	     nbhdNetwork = randomSymmetricNetwork 0.2
 	     }
 

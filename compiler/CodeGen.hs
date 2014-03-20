@@ -14,7 +14,7 @@ module CodeGen (generateCode) where
 
 
 
-import Data.Maybe (mapMaybe, fromMaybe, fromJust)
+import Data.Maybe (mapMaybe, fromMaybe, fromJust, isJust)
 import Data.List
 import Data.Function (on)
 import Text.Printf (printf)
@@ -38,14 +38,14 @@ toInit str = "init" ++ capitalize str
 
 
 generateCode :: Program -> String
-generateCode (Program agents attributes populations networks statistics initial othercode) = 
+generateCode (Program agents populations networks statistics initial othercode) = 
     if (Map.null initial) then error "no initial state specified!"
     else
         unlines [unlines (map contents othercode),
                 showAgentDeclaration agents,
                 showPopulationDeclarations (Map.keys populations),
                 showNetworkDeclarations (Map.keys networks),
-                unlines (map (showAgentWire (Map.map agent populations) (Map.map context networks) attributes)
+                unlines (map (showAgentWire (Map.map agent populations) (Map.map context networks))
                              (Map.toList agents)),
                 showModelStructure populations networks,
                 showStats statistics,
@@ -55,10 +55,10 @@ showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
     let showAgent (name, (Agent attributes)) = 
             printf "%s { %s }" name (intercalate ", " . map (showAttr) $ attributes)
-        showAttr (name, str) = printf "%s %s" name str
+        showAttr (Attribute {name, annotation, code}) = printf "%s %s" name annotation
     in printf "data Agent = %s deriving Show\n" 
        (intercalate " | " . map (showAgent) $ Map.toList agents)
-       ++ showAttributeAccessors (concatMap (map fst . fields) $ Map.elems agents)
+       ++ showAttributeAccessors (nub . concatMap (map name . attributes) $ Map.elems agents)
 
 showAttributeAccessors :: [Name] -> String
 showAttributeAccessors = unlines . map showAccessor where
@@ -91,13 +91,13 @@ toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op) where
 -- END HELPERS
 -- showAgentWire populations networks attributes agent
 -- 
-showAgentWire :: Map Name Name -> Map Name NetworkContext -> Map Name Attribute -> (Name, Agent) -> String
-showAgentWire populations networks attributes (name, Agent fields)  = prettify $
+showAgentWire :: Map Name Name -> Map Name NetworkContext -> (Name, Agent) -> String
+showAgentWire populations networks (agentName, Agent attributes)  = prettify $
     printf "wire%s g id initAgent = purifyRandom (helper %s) g where %s"
-           name (unwords localWireNames) (genDecs localDecs)
+           agentName (unwords localWireNames) (genDecs localDecs)
     where fromRight (Right x) = x 
-          fieldNames = map fst fields
-          activeFieldNames = Map.keys agentAttributes
+          fieldNames = map name attributes
+          activeFieldNames = map name activeAttributes
           localWireNames = map (printf "%sWire") activeFieldNames
           localDecs = [helper] ++ env ++ localWires
 
@@ -117,17 +117,17 @@ showAgentWire populations networks attributes (name, Agent fields)  = prettify $
           networkAttributes = concatMap extractAttributes (Map.toList networks)
           extractAttributes :: (Name, NetworkContext) -> [String]
           extractAttributes (networkName, Symmetric {population = population , access = (_, accessName)}) = 
-              if populations Map.! population == name
+              if populations Map.! population == agentName
               then [printf "%s = networkView id view1 %s %s" accessName networkName population]
               else []
           -- TODO add cases for other network types
           initAttribute name = printf "%s = %s initAgent" (toInit name) (toAccessor name)
 
           -- the local wires
-          agentAttributes = Map.filterWithKey (\name _ -> name `elem` fieldNames) attributes
-          localWires = map localWire (Map.toList agentAttributes)
-          localWire (attribute, Attribute (HaskellBlock (code))) = 
-              desugar (attribute ++ "Wire " ++ code)
+          activeAttributes = filter (isJust . code) attributes
+          localWires = map localWire activeAttributes
+          localWire (Attribute {name = name, code = Just (HaskellBlock (rhs)), ..}) = 
+              desugar (name ++ "Wire " ++ rhs)
 
    
 showModelStructure :: Map Name Population -> Map Name Network -> String

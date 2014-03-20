@@ -25,14 +25,13 @@ import Syntax
 
 -- LEXICAL ISSUES
 agentKeyword = "agent"
-attributeKeyword = "reactive"
 populationKeyword = "population"
 removalKeyword = "removal"
 additionKeyword = "addition"
 networkKeyword = "network"
 statisticKeyword = "statistic"
 initialKeyword = "initialState"
-keywords = [agentKeyword, attributeKeyword, populationKeyword, 
+keywords = [agentKeyword, populationKeyword, 
             removalKeyword, networkKeyword, statisticKeyword,
            initialKeyword] 
 
@@ -60,7 +59,7 @@ program = do
 block :: ProgramParser ()
 block = do
   whiteSpace
-  dec <- choice . map try $ [agentDec, attributeDec, populationDec, networkDec, statisticDec, initialState,
+  dec <- choice . map try $ [agentDec, populationDec, networkDec, statisticDec, initialState,
                              justHaskell]
   return dec
 
@@ -86,32 +85,32 @@ haskellBlock = do
 lexer = Token.makeTokenParser haskellDef
 identifier = Token.identifier lexer
 braces = Token.braces lexer
-commaSep1 = Token.commaSep1 lexer
+semiSep1 = Token.semiSep1 lexer
 symbol = Token.symbol lexer
 whiteSpace = Token.whiteSpace lexer
 parens = Token.parens lexer
+semi = Token.semi lexer
 
 
 agentDec = do 
   symbol agentKeyword
   name <- identifier
-  fields <- braces (commaSep1 field)
-  updateState (addAgent name (Agent fields))
-
-field = do
-  fieldName <- identifier
-  cc <- symbol "::" 
-  ty <- many (noneOf ",{}\n")
-  optional eol
-  whiteSpace
-  return (fieldName, cc ++ " " ++ ty)
-
+  attributes <- braces (semiSep1 attributeDec)
+  updateState (addAgent name (Agent attributes))
 
 attributeDec = do
-  symbol attributeKeyword
-  name <- identifier
-  code <- haskellBlock  
-  updateState (addAttribute name (Attribute code))
+  fieldName <- identifier
+  cc <- symbol "::" 
+  ty <- many (noneOf ";{}\n=")
+  optional eol
+  whiteSpace -- TODO be able to read multiple empty lines
+  code <- many (noneOf ";{}")
+  whiteSpace -- TODO same here
+  return (Attribute{ name = fieldName, 
+                     annotation = cc ++ " " ++ ty,
+                     code = if (null code) then Nothing
+                             else Just $ HaskellBlock code}
+                     )
 
 
 populationDec = do
@@ -165,12 +164,12 @@ statisticDec = do
 
 initialState = do
   symbol initialKeyword
-  bindings <- braces (commaSep1 binding)
+  bindings <- braces (semiSep1 binding)
   updateState (addInitial bindings)
   
 binding = do 
   whiteSpace
   name <- identifier
   symbol "="
-  code <- many (noneOf ",{}")
+  code <- many (noneOf ";{}")
   return (name, HaskellBlock code)

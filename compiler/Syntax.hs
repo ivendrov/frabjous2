@@ -37,8 +37,8 @@ data NetworkContext = Symmetric { population :: Name,
                       deriving (Show)
 
 
-data Agent = Agent {fields :: [Field]} deriving (Show)
-data Attribute = Attribute {code :: HaskellBlock} deriving (Show)
+data Agent = Agent {attributes :: [Attribute]} deriving (Show)
+data Attribute = Attribute {name :: String, annotation :: String, code :: Maybe HaskellBlock} deriving (Show)
 data Population = Population {agent :: Name,
                               removal :: HaskellBlock,
                               addition :: HaskellBlock} deriving (Show)
@@ -46,7 +46,6 @@ data Network = Network {context :: NetworkContext,
                         networkSpec :: HaskellBlock} deriving (Show)
 
 data Program = Program { agents :: Map Name Agent,
-                         attributes :: Map Name Attribute,
                          populations :: Map Name Population,
                          networks :: Map Name Network,
                          statistics :: Map Name HaskellBlock,
@@ -54,7 +53,6 @@ data Program = Program { agents :: Map Name Agent,
                          otherCode :: [HaskellBlock]} deriving (Show)
 
 emptyProgram = Program { agents = Map.empty,
-                         attributes = Map.empty,
                          populations = Map.empty,
                          networks = Map.empty,
                          statistics = Map.empty,
@@ -62,7 +60,6 @@ emptyProgram = Program { agents = Map.empty,
                          otherCode = []}
 
 addAgent name agent program = program { agents = Map.insert name agent (agents program) }
-addAttribute name attribute program = program { attributes = Map.insert name attribute (attributes program) }
 addPopulation name population program = program {populations = Map.insert name population (populations program) }
 addNetwork name network program = program { networks = Map.insert name network (networks program) }
 addStatistic name statistic program = program { statistics = Map.insert name statistic (statistics program) }
