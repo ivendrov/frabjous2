@@ -5,7 +5,8 @@ agent Person { x :: Double,
       	       state :: State
 	     }
 
-reactive x = accum (+) initX . pure 1
+reactive x = integrate initX . noise (uniform (-10, 10))    	     
+reactive y  = integrate initY . noise (uniform (-10, 10))
 
 reactive state = statechart state transitions
   where infectionRatePerPerson = 0.4
@@ -13,9 +14,9 @@ reactive state = statechart state transitions
 			    (fromIntegral (length (filter (==I) (map getState (neighbors t)))))
         transitions state = 
               case state of 
-                     S -> pure I . rate . calcInfectionRate
-                     I -> pure R . after 3
-                     R -> pure S . after 3
+                     S -> constant I . rate . calcInfectionRate
+                     I -> constant R . after 3
+                     R -> constant S . after 3
 
 
 

@@ -13,8 +13,21 @@ module StandardLibrary
   frequencies,
   draw,
   -- WIRE COMBINATORS
+  -- | simple combinators
+  constant,
   function, 
+  -- | event combinators
   never,
+  after,
+  for,
+  delay,
+  -- | accumulation & real numbers
+  integrate,
+  accumulate,
+  clip,
+
+  -- | randomness
+  noise,
   rate,
   rSwitch,
   statechart,
@@ -29,8 +42,9 @@ where
 import InternalLibrary
 import Prelude hiding ((.), id)
 import Control.Monad.Random
-import Data.Traversable as Traversable
-import Control.Wire hiding (getRandom, MonadRandom, getRandomR)
+import Data.Traversable as Traversable hiding (for)
+import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, LastException, stepWire, (<|>), after, delay, for)
+import qualified Control.Wire as Wire
 import Data.Monoid
 import Data.Tuple (swap)
 import Data.List
@@ -61,15 +75,39 @@ draw n rand = Traversable.sequence (replicate n rand)
 
 -- 1. WIRE COMBINATORS
 
+constant :: (Monad m) => b -> Wire e m a b
+constant = Wire.pure 
+
 function :: (Monad m) => (a -> b) -> Wire e m a b
-function = arr
+function = Wire.arr
 
 never :: (Monad m, Monoid e) => Wire e m a b
-never = Control.Wire.empty
+never = Wire.empty
 
 
+-- | draws a value from the given distribution at every timestep
+noise :: MonadRandom m => m a -> Wire LastException m input a
+noise distribution = mkGen $ \_ _ -> do
+                       val <- distribution
+                       return (Right val, noise distribution)
 
--- a wire that takes as input the rate of infection, and produces a unit value with a rate
+-- | accumulates the output of a signal function by the given combining function, with the given starting state
+accumulate :: Monad m => (b -> a -> b) -> b -> Wire e m c a -> Wire e m c b
+accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)     
+
+-- | integrates its input with respect to time
+integrate :: Monad m => Double -> Wire e m Double Double
+integrate init = mkPure $ \dt x -> 
+                  let newVal = init + dt * x
+                  in newVal `seq` (Right newVal, integrate newVal)
+
+-- | the function 'clip' keeps its value in the given closed interval
+clip (a,b) x = if x < a then a
+               else if x > b then b
+               else x
+
+
+-- a wire that takes as input a rate, and produces a unit value with a rate
 -- corresponding to the given time, minus inaccuracy with multiple occurrences in a 
 -- single time interval
 rate :: MonadRandom m  => Wire LastException m Double ()
@@ -103,7 +141,9 @@ statechart start transitions =
     mkGen $ \dt x -> do 
       (Right init, _) <- stepWire start dt x
       stepWire (rSwitch computeWire init) dt x where
-                     computeWire state = transitions state <|> pure state
+                     computeWire state = transitions state <|> constant state
+
+
 
 
 -- 2. NETWORKS

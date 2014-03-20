@@ -8,7 +8,7 @@
 
 module Main where
 
-import Control.Wire hiding (getRandom, object)
+import Control.Wire (mkGen, (.), stepWire, stepWireP, WireP)
 import Control.Monad hiding (when, mapM, sequence)
 import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
