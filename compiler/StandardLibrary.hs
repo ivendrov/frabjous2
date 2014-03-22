@@ -22,25 +22,36 @@ module StandardLibrary
   constant,
   function, 
   -- | event combinators
+  countEvents,
   (<|>),
   edge,
+  changed,
   andThen,
-  countEvents,
   never,
   after,
   for,
   delay,
-  -- | accumulation & real numbers
-  integrate,
+
+  -- | functions that take wires as parameters & analyze them somehow
   accumulate,
+  onChange,
+
+  -- | real numbers
+  integrate,
   randomWalk,
 
   -- | randomness
   noise,
   poisson,
   rate,
-  rSwitch,
+
+  
+
+  -- | switches 
+  switch,
   statechart,
+
+
   -- NETWORKS
   randomNetwork,
   randomSymmetricNetwork,
@@ -55,7 +66,9 @@ import InternalLibrary
 import Prelude hiding ((.), id, length)
 import Control.Monad.Random
 import Data.Traversable as Traversable hiding (for)
-import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, LastException, (<|>), after, delay, for, andThen, edge)
+import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, WireM, EventM, LastException, 
+                     (<|>), after, delay, for, andThen, edge,
+                     changed)
 import qualified Control.Wire as Wire
 import Data.Monoid
 import Data.Tuple (swap)
@@ -116,15 +129,16 @@ never = Wire.empty
 countEvents :: (Monad m, Monoid e) => Wire e m a Int
 countEvents = internalState (const (+1)) 0
 
+
+
+
 -- | draws a value from the given distribution at every timestep
 noise :: MonadRandom m => m a -> Wire LastException m input a
 noise distribution = mkGen $ \_ _ -> do
                        val <- distribution
                        return (Right val, noise distribution)
 
--- | accumulates the output of a signal function by the given combining function, with the given starting state
-accumulate :: Monad m => (b -> a -> b) -> b -> Wire e m c a -> Wire e m c b
-accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)     
+
 
 -- | integrates its input with respect to time
 integrate :: Monad m => Double -> Wire e m Double Double
@@ -160,35 +174,41 @@ rate = mkGen $
 poisson :: MonadRandom m => Double -> Wire LastException m a Int
 poisson lambda = accumulate (const . (+1)) 0 (rate . constant lambda)
 
--- rSwitch switches between wires based on the given discriminator function "computeWire"
--- currently, every time its current wire changes output, it plugs the output into computeWire
--- to determine the wire to switch to.
--- TODO: decompose the "every time wire changes" and the "select wire based on a function" 
---       into two separate combinators. The second combinator could be used to implement
---       phase shifts in other variables (e.g. income calculation as child vs adult)
-rSwitch computeWire initialState = helper' initialState (computeWire initialState) where 
-    helper' state currentWire = 
-            mkGen $ \dt x -> do
-              (output, currentWire') <- stepWire currentWire dt x
-              case output of 
-                Left _ -> error "status wire should never inhibit"
-                Right newState -> 
-                    return (output, 
-                            helper'  newState           
-                            (if (newState == state) then currentWire' else computeWire newState))
+
+-----------------------------------------------------
+-- Functions that take wires as parameters 
+-- and analyze them somehow - ('higher order' wires)
+-----------------------------------------------------
+-- | accumulates the output of a signal function by the given combining function, with the given starting state
+accumulate :: Monad m => (b -> a -> b) -> b -> Wire e m c a -> Wire e m c b
+accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)   
 
 
--- statechart :: Wire a b -> Wire a b -> Wire a b
--- statechart start transitions is a wire whose internal state will be the most recent
+-- | produces when the argument wire changes output
+onChange :: (Eq b, Monad m) => WireM m a b -> EventM m a
+onChange wire = on (changed . wire) 
+
+-- | produces when the argument wire produces
+on :: Monad m => WireM m a b -> EventM m a
+on wire = mkGen $ \dt x -> do
+                  (output, wire') <- stepWire wire dt x
+                  let output' = case output of 
+                                  Right _ -> Right x
+                                  Left e -> Left e
+                  return (output', on wire')
+                
+
+
+-- | whenever produces produces a wire, that wire is switched into (and starts at time 0)
+-- | (difference from Netwire is that there's no initial wire)
+switch producer = Wire.switch producer never
+
+
+
+-- statechart :: Wire a b -> Wire a (Wire a b) -> Wire a b
+-- statechart state transitions is a wire whose internal state will be the most recent
 -- value produced by transitions; and which is refreshed every time its internal state changes
-statechart start transitions = 
-    mkGen $ \dt x -> do 
-      (Right init, _) <- stepWire start dt x
-      stepWire (rSwitch computeWire init) dt x where
-                     computeWire state = transitions state <|> constant state
-
-
-
+statechart state transitions = switch (transitions . onChange state) <|> state
 
 -- 2. NETWORKS
 

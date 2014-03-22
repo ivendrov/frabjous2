@@ -5,7 +5,16 @@ agent Person {
 
       y :: Double = randomWalk initY (uniform (-10, 10));
 
-      state :: State = (for 3 . constant S) <|> constant I
+      state :: State = statechart state transitions
+      	    where infectionRatePerPerson = 0.4
+	    	  numInfectedNeighbours t = count (==I) (map getState (neighbors t))
+          	  calcInfectionRate = infectionRatePerPerson * numInfectedNeighbours
+        	  transitions t = 
+              		case state t of 
+                     	     S -> constant I . rate . calcInfectionRate
+                     	     I -> constant R . after 3
+                     	     R -> constant S . after 3
+
       {-	= statechart state transitions
       	   where infectionRatePerPerson = 0.4
           	 calcInfectionRate t = infectionRatePerPerson * 
@@ -35,7 +44,7 @@ personDistribution = do
   return (Person {..})
 
 
-statistic peopleState = function (map x . IntMap.elems . collection . people)
+--statistic peopleState = function (map x . IntMap.elems . collection . people)
  
 initialState {
 	     people = draw 20 personDistribution;
