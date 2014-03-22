@@ -73,7 +73,7 @@ loopWire init transition =  forI 1 . pure init <|> result init transition where
 
 -- purifyRandom wire gen takes a wire in the Rand monad and an initial generator,
 -- and makes it into a pure wire.
-purifyRandom :: (RandomGen g) => Wire e (Rand g) a b -> g -> Wire e Identity a b
+purifyRandom :: (RandomGen g) => WireM (Rand g) a b -> g -> WireM Identity a b
 purifyRandom wire gen = mkPure $ \dt x ->
                                     let ((output, wire'), gen') = runRand (stepWire wire dt x) gen
                                     in (output, purifyRandom wire' gen')

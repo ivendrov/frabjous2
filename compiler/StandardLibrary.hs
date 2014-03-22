@@ -8,7 +8,12 @@
 -- The Frabjous standard library
 --------------------------------------------------------------------------
 module StandardLibrary 
- (-- RANDOM NUMBERS
+ (-- UTILITY FUNCTIONS
+  clip,
+  length,
+  count,
+  stepWire,
+  -- RANDOM NUMBERS
   uniform,
   frequencies,
   draw,
@@ -17,6 +22,10 @@ module StandardLibrary
   constant,
   function, 
   -- | event combinators
+  (<|>),
+  edge,
+  andThen,
+  countEvents,
   never,
   after,
   for,
@@ -25,10 +34,10 @@ module StandardLibrary
   integrate,
   accumulate,
   randomWalk,
-  clip,
 
   -- | randomness
   noise,
+  poisson,
   rate,
   rSwitch,
   statechart,
@@ -37,19 +46,37 @@ module StandardLibrary
   randomSymmetricNetwork,
   poissonRandomSymmetric,
   distanceBased,
-  euclidean)
+  manhattan,
+  euclidean,
+  normed)
 where
 
 import InternalLibrary
-import Prelude hiding ((.), id)
+import Prelude hiding ((.), id, length)
 import Control.Monad.Random
 import Data.Traversable as Traversable hiding (for)
-import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, LastException, stepWire, (<|>), after, delay, for)
+import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, LastException, (<|>), after, delay, for, andThen, edge)
 import qualified Control.Wire as Wire
 import Data.Monoid
 import Data.Tuple (swap)
-import Data.List
+import Data.List hiding (length)
+import qualified Data.List
 import qualified Data.IntMap as IntMap
+
+
+-- -1. UTILITY FUNCTIONS
+-- | the function 'clip' keeps its value in the given closed interval
+clip (a,b) x = if x < a then a
+               else if x > b then b
+               else x
+
+-- | generalizes length to any numeric type, allowing one to elide 'fromIntegral' in code
+length :: (Num n) => [a] -> n
+length = fromIntegral . Data.List.length
+
+-- | counts the number of elements that satisfy the given predicate
+count :: Num n => (a -> Bool) -> [a] -> n
+count pred = length . filter pred
 
 
 -- 0. RANDOM NUMBERS 
@@ -70,7 +97,8 @@ draw :: MonadRandom m => Int -> m a -> m [a]
 draw n rand = Traversable.sequence (replicate n rand)
       
   
-  
+stepWire :: Monad m => Wire.WireM m a b -> Wire.Time -> a -> m (Either LastException b, Wire.WireM m a b)
+stepWire = Wire.stepWire
   
 
 
@@ -85,6 +113,8 @@ function = Wire.arr
 never :: (Monad m, Monoid e) => Wire e m a b
 never = Wire.empty
 
+countEvents :: (Monad m, Monoid e) => Wire e m a Int
+countEvents = internalState (const (+1)) 0
 
 -- | draws a value from the given distribution at every timestep
 noise :: MonadRandom m => m a -> Wire LastException m input a
@@ -98,21 +128,22 @@ accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)
 
 -- | integrates its input with respect to time
 integrate :: Monad m => Double -> Wire e m Double Double
-integrate = internalState (\dt x -> (+ dt*x))
+integrate = internalStateT (\dt x -> (+ dt*x))
 
 -- | performs a 1D random walk at the velocity specified by the given distribution
 randomWalk init distribution = integrate init . noise distribution
 
--- | (TODO REFACTOR?) internalState applies the given transition function
--- | to its state at every step, then outputs the state
-internalState transition init = mkState init $ \dt (x, state) -> 
+-- | (TODO REFACTOR?) internalStateT applies the given transition function
+-- | to the timestep, input, and state at every step, then outputs the new state
+internalStateT transition init = mkState init $ \dt (x, state) -> 
                                  let newState = transition dt x state
                                  in newState `seq` (Right newState, newState)
 
--- | the function 'clip' keeps its value in the given closed interval
-clip (a,b) x = if x < a then a
-               else if x > b then b
-               else x
+-- | internalState applies the given transition function 
+-- | to its input and state at every step, then outputs the state
+internalState transition init = internalStateT (const transition) init
+
+
 
 
 -- a wire that takes as input a rate, and produces a unit value with a rate
@@ -123,6 +154,11 @@ rate = mkGen $
            \dt lambda -> do 
              e <- getRandom
              return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rate)
+
+
+-- models a poisson process with rate parameter lambda
+poisson :: MonadRandom m => Double -> Wire LastException m a Int
+poisson lambda = accumulate (const . (+1)) 0 (rate . constant lambda)
 
 -- rSwitch switches between wires based on the given discriminator function "computeWire"
 -- currently, every time its current wire changes output, it plugs the output into computeWire
@@ -192,23 +228,34 @@ poissonRandomSymmetric prob extractPop = helper where
              return (Right network, helper)
 
 distanceBased :: (a -> a -> Double) -> 
-                 Double -> 
+                 (Double -> Bool) -> 
                 (model -> ReactiveOutput a) -> 
                     ModelWire model ManyToMany
-distanceBased d limit extractPop = function helper where
+distanceBased d pred extractPop = function helper where
     helper model = let pop = collection . extractPop $ model
                        indices = IntMap.keys pop
                        indexPairs = pairs indices
-                       withinDistance (i1, i2) = d (pop IntMap.! i1) (pop IntMap.! i2) < limit
+                       withinDistance (i1, i2) = pred $ d (pop IntMap.! i1) (pop IntMap.! i2) 
                    in fromEdges indices indices (filter withinDistance indexPairs)
 
 euclidean :: [a -> Double] -> a -> a -> Double
-euclidean accessors p1 p2 = 
+euclidean = normed 2
+
+
+manhattan :: Num n => [a -> n] -> a -> a -> n
+manhattan accessors p1 p2 = sum . map abs $ diffs accessors p1 p2
+
+diffs accessors p1 p2 = 
     let coords1 = map ($ p1) accessors
         coords2 = map ($ p2) accessors
-        diffs = zipWith (-) coords1 coords2
-        sumSquares = sum $ map (^2) diffs        
-    in sqrt sumSquares
+    in zipWith (-) coords1 coords2
+    
+
+normed :: Double -> [a -> Double] -> a -> a -> Double
+normed p accessors p1 p2 = norm (diffs accessors p1 p2)
+    where norm diffs = sum (map (**p) diffs) ** (1/p)
+
+
                        
                        
                        

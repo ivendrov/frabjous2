@@ -2,18 +2,20 @@ data State = S | I | R deriving (Eq, Show)
 
 agent Person { 
       x :: Double = randomWalk initX (uniform (-10, 10));
+
       y :: Double = randomWalk initY (uniform (-10, 10));
-      state :: State 
-      	= statechart state transitions
+
+      state :: State = (for 3 . constant S) <|> constant I
+      {-	= statechart state transitions
       	   where infectionRatePerPerson = 0.4
           	 calcInfectionRate t = infectionRatePerPerson * 
-			    		(fromIntegral (length (filter (==I) (map getState (neighbors t)))))
+			    		count (==I) (map getState (neighbors t))
         	 transitions state = 
               		case state of 
                      	     S -> constant I . rate . calcInfectionRate
                      	     I -> constant R . after 3
                      	     R -> constant S . after 3
-
+-}
 }
 
 
@@ -21,7 +23,7 @@ agent Person {
 population people of Person
 -- addition = noise (draw 1 personDistribution) . rate . 1
 
-network nbhdNetwork between many neighbors in people = distanceBased (euclidean [x, y]) 150
+network nbhdNetwork between many neighbors in people = distanceBased (euclidean [x, y]) (<150)
 
 width, height :: Double
 height = 500
@@ -33,10 +35,10 @@ personDistribution = do
   return (Person {..})
 
 
-statistic peopleState = function (map state . IntMap.elems . collection . people)
+statistic peopleState = function (map x . IntMap.elems . collection . people)
  
 initialState {
-	     people = draw 5 personDistribution;
+	     people = draw 20 personDistribution;
 	     nbhdNetwork = randomSymmetricNetwork 0.2
 	     }
 
