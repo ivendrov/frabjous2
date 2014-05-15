@@ -63,6 +63,7 @@ module StandardLibrary
   randomSymmetric,
   poissonRandomSymmetric,
   distanceBased,
+  gridWithDiags,
   -- auxiliary functions
   manhattan,
   euclidean,
@@ -327,13 +328,15 @@ normed :: Double -> [a -> Double] -> a -> a -> Double
 normed p accessors p1 p2 = norm (diffs accessors p1 p2)
     where norm diffs = sum (map (**p) diffs) ** (1/p)
 
-{-
-grid8 :: Int -> (a -> (Int, Int)) -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
-grid8 resolution coords extractPop = function helper where
-    helper model = let pop = collection . extractPop $ model
-                       indices = 
 
-          -}             
+gridWithDiags :: Int -> [a -> Int] -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
+gridWithDiags resolution coords = predicate connected where
+    connected a1 a2 = let x = map ($a1) coords
+                          y = map ($a2) coords
+                          diffs = map abs $ zipWith (-) x y
+                      in all (<= resolution) diffs
+
+                       
                        
                        
 
