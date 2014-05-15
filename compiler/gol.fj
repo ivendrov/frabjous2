@@ -1,0 +1,31 @@
+
+
+agent Cell { 
+    x :: Int;
+    y :: Int;
+    alive t :: Bool = let liveNeighbors = count getAlive (neighbors t)
+                      in if (alive t) 
+                         then (liveNeighbors == 2 || liveNeighbors == 3)
+                         else (liveNeighbors == 3)
+                           
+}	
+
+
+
+population cells of Cell
+--addition = noise (draw 1 personDistribution) . rate . constant 1
+
+network nbhdNetwork 
+between many neighbors in cells = const never              
+ 
+initialState {  cells = return initialCells;
+	        nbhdNetwork = gridWithDiags 50 [x,y] }
+	     
+width, height :: Int
+height = 500
+width = 500
+cellSize = 50
+
+initialCells = [Cell x y alive | x <- [0, 0 + cellSize .. width], 
+                                 y <- [100, 100 + cellSize .. height],
+                                 let alive = y >= 200 && y <= 300 && x == 250]
