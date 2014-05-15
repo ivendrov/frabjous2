@@ -257,11 +257,12 @@ randomNetwork fraction vertices1 vertices2 = do
 -- each UNDIRECTED edge has a "fraction" probability of existing
 poissonSymmetricNetwork fraction vertices _ = do
   randoms <- getRandoms
-  let edges' = map snd . filter ((<fraction) . fst) . zip randoms $ 
+  let edges = map snd . filter ((<fraction) . fst) . zip randoms $ 
                [(u,v) | u <- vertices, 
-                v <- vertices, u < v]
-      edges = edges' ++ map swap edges'
-  return $ fromEdges vertices vertices edges
+                v <- vertices, u < v]      
+  return $ fromEdges vertices vertices (symmetrify edges)
+
+symmetrify edges = edges ++ map swap edges
 
 
 -- | creates a random network with each link probability calculated using the 
@@ -303,7 +304,7 @@ predicate connected extractPop = function helper where
                        indices = IntMap.keys pop
                        indexPairs = pairs indices
                        withinDistance (i1, i2) = connected (pop IntMap.! i1) (pop IntMap.! i2) 
-                   in fromEdges indices indices (filter withinDistance indexPairs)
+                   in fromEdges indices indices (symmetrify $ filter withinDistance indexPairs)
 
 distanceBased :: Num n => (a -> a -> n) -> 
                  (n -> Bool) -> 
