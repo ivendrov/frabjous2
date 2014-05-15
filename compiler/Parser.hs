@@ -100,6 +100,7 @@ agentDec = do
 
 attributeDec = do
   fieldName <- identifier
+  reactiveSyntax <- symbol "t" <|> return ""
   cc <- symbol "::" 
   ty <- many (noneOf ";{}\n=")
   optional eol
@@ -109,7 +110,7 @@ attributeDec = do
   return (Attribute{ name = fieldName, 
                      annotation = cc ++ " " ++ ty,
                      code = if (null code) then Nothing
-                             else Just $ HaskellBlock code}
+                             else Just $ HaskellBlock $ reactiveSyntax ++ code}
                      )
 
 
