@@ -59,11 +59,15 @@ module StandardLibrary
   emptyNetwork,
   randomNetwork,
   randomSymmetricNetwork,
+  poissonSymmetricNetwork,
+  predicate,
+  gridWithDiags,
   -- dynamic networks
+  memorylessSymmetric,
   randomSymmetric,
   poissonRandomSymmetric,
   distanceBased,
-  gridWithDiags,
+
   -- auxiliary functions
   manhattan,
   euclidean,
@@ -83,6 +87,7 @@ import Data.Tuple (swap)
 import Data.List hiding (length)
 import qualified Data.List
 import qualified Data.IntMap as IntMap
+import Data.IntMap (IntMap)
 
 type Real = Double
 
@@ -237,6 +242,7 @@ stateDiagram state transitions =  switch (transitions . onChange state) `orElse`
 
 --  A) Library functions for creation 
 pairs xs = [(u, v) | u <- xs, v <- xs, u < v]
+symmetrify edges = edges ++ map swap edges
 
 
 emptyNetwork :: (MonadRandom m) => [Int] -> [Int] -> m ManyToMany
@@ -262,34 +268,53 @@ poissonSymmetricNetwork fraction vertices _ = do
                 v <- vertices, u < v]      
   return $ fromEdges vertices vertices (symmetrify edges)
 
-symmetrify edges = edges ++ map swap edges
+
 
 
 -- | creates a random network with each link probability calculated using the 
 -- | binary function prob
-randomSymmetricNetwork :: (MonadRandom m) => ((a,a) -> Double) -> [(Int, a)] ->
-                          m ManyToMany
-randomSymmetricNetwork prob vertices = do
+randomSymmetricNetwork :: ((a,a) -> Double) -> NetworkGenerator a
+randomSymmetricNetwork prob pop _ = do
   randoms <- getRandoms
-  let edges' = map (snd . snd) . filter (\(r, (vs, _)) -> r < prob vs) . zip randoms $ 
+  let vertices = IntMap.toList pop
+      edges' = map (snd . snd) . filter (\(r, (vs, _)) -> r < prob vs) . zip randoms $ 
                [((v1, v2), (i1, i2)) | (i1, v1) <- vertices, 
                 (i2, v2) <- vertices, i1 < i2]
       edges = edges' ++ map swap edges'
       indices = map fst vertices
   return $ fromEdges indices indices edges
+
+predicate :: (a -> a -> Bool) -> NetworkGenerator a
+predicate connected pop _ = 
+    let vertices = IntMap.toList pop
+        edges = [(i1, i2) | (i1, v1) <- vertices, (i2, v2) <- vertices, i1 < i2, connected v1 v2]
+        indices = IntMap.keys pop
+    in return $ fromEdges indices indices (symmetrify edges)
+
+
+gridWithDiags :: Int -> [a -> Int] -> NetworkGenerator a
+gridWithDiags resolution coords = predicate connected where
+    connected a1 a2 = let x = map ($a1) coords
+                          y = map ($a2) coords
+                          diffs = map abs $ zipWith (-) x y
+                      in all (<= resolution) diffs
   
 
 --  B) dynamic networks
 
+-- converts a static network generator into a dynamic one by just applying it every step
+memorylessSymmetric :: NetworkGenerator a -> 
+                       (model -> ReactiveOutput a) -> ModelWire model ManyToMany
+memorylessSymmetric staticCreator extractPop = helper where
+    helper = mkGen $ \dt model -> do
+                   let v1 = collection . extractPop $ model
+                   network <- staticCreator v1 v1
+                   return (Right network, helper)
 
 -- | have links between agents based on the given probability function
 randomSymmetric :: ((a,a) -> Double) -> (model -> ReactiveOutput a) ->
                    ModelWire model ManyToMany
-randomSymmetric prob extractPop = helper where
-    helper = mkGen $ \dt model -> do 
-               let v1 = IntMap.toList . collection . extractPop $ model
-               network <- randomSymmetricNetwork prob v1
-               return (Right network, helper)
+randomSymmetric prob = memorylessSymmetric (randomSymmetricNetwork prob)
  
 poissonRandomSymmetric :: Double ->
                           (model -> ReactiveOutput a) ->                 
@@ -297,7 +322,8 @@ poissonRandomSymmetric :: Double ->
 poissonRandomSymmetric prob = randomSymmetric (const prob)
 
 
-
+predicateDynamic pred = memorylessSymmetric (predicate pred)
+{-
 predicate :: (a -> a -> Bool) -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
 predicate connected extractPop = function helper where
     helper model = let pop = collection . extractPop $ model
@@ -305,12 +331,13 @@ predicate connected extractPop = function helper where
                        indexPairs = pairs indices
                        withinDistance (i1, i2) = connected (pop IntMap.! i1) (pop IntMap.! i2) 
                    in fromEdges indices indices (symmetrify $ filter withinDistance indexPairs)
+-}
 
 distanceBased :: Num n => (a -> a -> n) -> 
                  (n -> Bool) -> 
                 (model -> ReactiveOutput a) -> 
                     ModelWire model ManyToMany
-distanceBased d pred = predicate (\ a b -> pred $ d a b)
+distanceBased d pred = predicateDynamic (\ a b -> pred $ d a b)
 
 euclidean :: [a -> Double] -> a -> a -> Double
 euclidean = normed 2
@@ -330,12 +357,6 @@ normed p accessors p1 p2 = norm (diffs accessors p1 p2)
     where norm diffs = sum (map (**p) diffs) ** (1/p)
 
 
-gridWithDiags :: Int -> [a -> Int] -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
-gridWithDiags resolution coords = predicate connected where
-    connected a1 a2 = let x = map ($a1) coords
-                          y = map ($a2) coords
-                          diffs = map abs $ zipWith (-) x y
-                      in all (<= resolution) diffs
 
                        
                        
