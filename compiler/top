@@ -14,7 +14,7 @@ import Control.Monad.Random hiding (fromList)
 import Control.Monad.Identity (Identity)
 
 -- NOTE: by default, sequence operations are VECTOR ones
-import Prelude hiding ((.), id, mapM, sequence, length, until)
+import Prelude hiding ((.), id, mapM, sequence, length, until, Real)
 import Control.Arrow
 import qualified Data.List as List
 import Data.Either (rights)

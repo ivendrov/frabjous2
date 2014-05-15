@@ -1,54 +1,39 @@
-data State = S | I | R deriving (Eq, Show)
+data InfectionState = S | I | R deriving (Eq, Show)
 
 agent Person { 
-      x :: Double = randomWalk initX (uniform (-10, 10));
+    x :: Real = randomWalk initX (uniform (-10, 10));
+    y :: Real = randomWalk initY (uniform (-10, 10));
 
-      y :: Double = randomWalk initY (uniform (-10, 10));
+    state :: InfectionState = stateDiagram state transitions
+      	where transitions t = 
+              	  case (state t) of 
+                    S -> constant I . rate . infectionRate
+                    I -> constant R . rate . constant 0.3
+                    R -> constant S . after 4
+	      infectionRate = perContactRate * numContacts
+              perContactRate = 0.4
+	      numContacts t = count infected (neighbors t)  }   	
 
-      state :: State = statechart state transitions
-      	    where infectionRatePerPerson = 0.4
-	    	  numInfectedNeighbours t = count (==I) (map getState (neighbors t))
-          	  calcInfectionRate = infectionRatePerPerson * numInfectedNeighbours
-        	  transitions t = 
-              		case state t of 
-                     	     S -> constant I . rate . calcInfectionRate
-                     	     I -> constant R . after 3
-                     	     R -> constant S . after 3
-
-      {-	= statechart state transitions
-      	   where infectionRatePerPerson = 0.4
-          	 calcInfectionRate t = infectionRatePerPerson * 
-			    		count (==I) (map getState (neighbors t))
-        	 transitions state = 
-              		case state of 
-                     	     S -> constant I . rate . calcInfectionRate
-                     	     I -> constant R . after 3
-                     	     R -> constant S . after 3
--}
-}
-
-
+infected person = (state person == I)
 
 population people of Person
--- addition = noise (draw 1 personDistribution) . rate . 1
+addition = noise (draw 1 personDistribution) . rate . constant 1
 
-network nbhdNetwork between many neighbors in people = distanceBased (euclidean [x, y]) (<150)
+network nbhdNetwork 
+between many neighbors in people = distanceBased (euclidean [x, y]) (<150)              
 
-width, height :: Double
+statistic numInfected = function (count infected . current . people)
+ 
+initialState {  people = draw 30 personDistribution;
+	        nbhdNetwork = emptyNetwork }
+	     
+width, height :: Real
 height = 500
 width = 1000
+
 personDistribution = do
   x <- uniform (0, width)
   y <- uniform (0, height)
   state <- frequencies [(I, 0.2), (S, 0.8), (R, 0)]
   return (Person {..})
-
-
---statistic peopleState = function (map x . IntMap.elems . collection . people)
- 
-initialState {
-	     people = draw 20 personDistribution;
-	     nbhdNetwork = randomSymmetricNetwork 0.2
-	     }
-
 

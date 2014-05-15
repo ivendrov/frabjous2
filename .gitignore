@@ -1,4 +1,8 @@
 LaTeX/
+*~
+*.hi
+*.o
+*.class
 accelerate/
 netwire/
 eclipse/
