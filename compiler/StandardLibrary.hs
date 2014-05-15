@@ -8,10 +8,13 @@
 -- The Frabjous standard library
 --------------------------------------------------------------------------
 module StandardLibrary 
- (-- UTILITY FUNCTIONS
+ (Real,
+  -- UTILITY FUNCTIONS
   clip,
   length,
   count,
+  fraction,
+  average,
   stepWire,
   -- RANDOM NUMBERS
   uniform,
@@ -22,7 +25,6 @@ module StandardLibrary
   constant,
   function, 
   -- | event combinators
-  countEvents,
   (<|>),
   edge,
   changed,
@@ -32,10 +34,6 @@ module StandardLibrary
   for,
   delay,
 
-  -- | functions that take wires as parameters & analyze them somehow
-  accumulate,
-  onChange,
-
   -- | real numbers
   integrate,
   randomWalk,
@@ -43,27 +41,36 @@ module StandardLibrary
   -- | randomness
   noise,
   poisson,
+  countingPoisson,
   rate,
 
-  
+  -- | functions that take wires as parameters & analyze them somehow
+  accumulate,
+  countEvents,
+  onChange,
 
   -- | switches 
   switch,
-  statechart,
+  stateDiagram,
 
 
   -- NETWORKS
+  -- static networks
+  emptyNetwork,
   randomNetwork,
   randomSymmetricNetwork,
+  -- dynamic networks
+  randomSymmetric,
   poissonRandomSymmetric,
   distanceBased,
+  -- auxiliary functions
   manhattan,
   euclidean,
   normed)
 where
 
 import InternalLibrary
-import Prelude hiding ((.), id, length)
+import Prelude hiding ((.), id, length, Real)
 import Control.Monad.Random
 import Data.Traversable as Traversable hiding (for)
 import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, WireM, EventM, LastException, 
@@ -76,6 +83,7 @@ import Data.List hiding (length)
 import qualified Data.List
 import qualified Data.IntMap as IntMap
 
+type Real = Double
 
 -- -1. UTILITY FUNCTIONS
 -- | the function 'clip' keeps its value in the given closed interval
@@ -90,6 +98,14 @@ length = fromIntegral . Data.List.length
 -- | counts the number of elements that satisfy the given predicate
 count :: Num n => (a -> Bool) -> [a] -> n
 count pred = length . filter pred
+
+-- | determines the fraction of elements satisfying the given predicate
+fraction :: (a -> Bool) -> [a] -> Double
+fraction pred l = count pred l / length l
+
+-- | finds the average of a list of numbers
+average :: [Double] -> Double
+average l = sum l / length l
 
 
 -- 0. RANDOM NUMBERS 
@@ -126,10 +142,6 @@ function = Wire.arr
 never :: (Monad m, Monoid e) => Wire e m a b
 never = Wire.empty
 
-countEvents :: (Monad m, Monoid e) => Wire e m a Int
-countEvents = internalState (const (+1)) 0
-
-
 
 
 -- | draws a value from the given distribution at every timestep
@@ -160,29 +172,39 @@ internalState transition init = internalStateT (const transition) init
 
 
 
--- a wire that takes as input a rate, and produces a unit value with a rate
--- corresponding to the given time, minus inaccuracy with multiple occurrences in a 
--- single time interval
+-- nonhomogenous poisson process
 rate :: MonadRandom m  => Wire LastException m Double ()
 rate = mkGen $
            \dt lambda -> do 
              e <- getRandom
              return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rate)
 
+-- a poisson process with rate parameter lambda
+poisson :: MonadRandom m => Double -> Wire LastException m a ()
+poisson lambda = rate . constant lambda
 
--- models a poisson process with rate parameter lambda
-poisson :: MonadRandom m => Double -> Wire LastException m a Int
-poisson lambda = accumulate (const . (+1)) 0 (rate . constant lambda)
+-- a counting poisson process
+countingPoisson :: MonadRandom m => Double -> Wire LastException m a Int
+countingPoisson lambda = countEvents (poisson lambda)
+
 
 
 -----------------------------------------------------
 -- Functions that take wires as parameters 
 -- and analyze them somehow - ('higher order' wires)
 -----------------------------------------------------
+-- | orElse is a synonym for <|> (acts like the first wire if it produces; otherwise, like the second)
+orElse :: Monad m => WireM m a b -> WireM m a b -> WireM m a b
+orElse = (<|>)
+
 -- | accumulates the output of a signal function by the given combining function, with the given starting state
 accumulate :: Monad m => (b -> a -> b) -> b -> Wire e m c a -> Wire e m c b
 accumulate binop init wire = Wire.hold init (Wire.accum binop init . wire)   
 
+
+-- | count the number of events of an argument wire
+countEvents :: Monad m => Wire e m a b -> Wire e m a Int
+countEvents wire = accumulate (+) 0 (1 . wire)
 
 -- | produces when the argument wire changes output
 onChange :: (Eq b, Monad m) => WireM m a b -> EventM m a
@@ -199,7 +221,7 @@ on wire = mkGen $ \dt x -> do
                 
 
 
--- | whenever produces produces a wire, that wire is switched into (and starts at time 0)
+-- | whenever producer produces a wire, that wire is switched into (and starts at time 0)
 -- | (difference from Netwire is that there's no initial wire)
 switch producer = Wire.switch producer never
 
@@ -208,7 +230,7 @@ switch producer = Wire.switch producer never
 -- statechart :: Wire a b -> Wire a (Wire a b) -> Wire a b
 -- statechart state transitions is a wire whose internal state will be the most recent
 -- value produced by transitions; and which is refreshed every time its internal state changes
-statechart state transitions = switch (transitions . onChange state) <|> state
+stateDiagram state transitions =  switch (transitions . onChange state) `orElse` state
 
 -- 2. NETWORKS
 
@@ -216,10 +238,12 @@ statechart state transitions = switch (transitions . onChange state) <|> state
 pairs xs = [(u, v) | u <- xs, v <- xs, u < v]
 
 
-randomNetwork, randomSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
+emptyNetwork :: (MonadRandom m) => [Int] -> [Int] -> m ManyToMany
+emptyNetwork v1 v2 = return $ fromEdges v1 v2 []
+
+randomNetwork, poissonSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
 -- randomNetwork rng fraction size = a random network with the given integer vertices. 
 -- each directed edge has a given probability of existing
-
 randomNetwork fraction vertices1 vertices2 = do 
     randoms <- getRandoms 
     let edges = map snd . filter ((<fraction) . fst) . zip randoms $ 
@@ -227,9 +251,10 @@ randomNetwork fraction vertices1 vertices2 = do
                      v <- vertices2]
     return $ fromEdges vertices1 vertices2 edges
 
--- randomSymmetricNetwork is like a random network but for a single population 
+
+-- poissonSymmetricNetwork is like a random network but for a single population 
 -- each UNDIRECTED edge has a "fraction" probability of existing
-randomSymmetricNetwork fraction vertices _ = do
+poissonSymmetricNetwork fraction vertices _ = do
   randoms <- getRandoms
   let edges' = map snd . filter ((<fraction) . fst) . zip randoms $ 
                [(u,v) | u <- vertices, 
@@ -237,26 +262,53 @@ randomSymmetricNetwork fraction vertices _ = do
       edges = edges' ++ map swap edges'
   return $ fromEdges vertices vertices edges
 
+
+-- | creates a random network with each link probability calculated using the 
+-- | binary function prob
+randomSymmetricNetwork :: (MonadRandom m) => ((a,a) -> Double) -> [(Int, a)] ->
+                          m ManyToMany
+randomSymmetricNetwork prob vertices = do
+  randoms <- getRandoms
+  let edges' = map (snd . snd) . filter (\(r, (vs, _)) -> r < prob vs) . zip randoms $ 
+               [((v1, v2), (i1, i2)) | (i1, v1) <- vertices, 
+                (i2, v2) <- vertices, i1 < i2]
+      edges = edges' ++ map swap edges'
+      indices = map fst vertices
+  return $ fromEdges indices indices edges
+  
+
 --  B) dynamic networks
+
+
+-- | have links between agents based on the given probability function
+randomSymmetric :: ((a,a) -> Double) -> (model -> ReactiveOutput a) ->
+                   ModelWire model ManyToMany
+randomSymmetric prob extractPop = helper where
+    helper = mkGen $ \dt model -> do 
+               let v1 = IntMap.toList . collection . extractPop $ model
+               network <- randomSymmetricNetwork prob v1
+               return (Right network, helper)
+ 
 poissonRandomSymmetric :: Double ->
                           (model -> ReactiveOutput a) ->                 
                               ModelWire model ManyToMany
-poissonRandomSymmetric prob extractPop = helper where
-  helper = mkGen $ \dt model -> do
-             let v1 = indices . extractPop $ model
-             network <- randomSymmetricNetwork prob v1 v1
-             return (Right network, helper)
+poissonRandomSymmetric prob = randomSymmetric (const prob)
 
-distanceBased :: (a -> a -> Double) -> 
-                 (Double -> Bool) -> 
-                (model -> ReactiveOutput a) -> 
-                    ModelWire model ManyToMany
-distanceBased d pred extractPop = function helper where
+
+
+predicate :: (a -> a -> Bool) -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
+predicate connected extractPop = function helper where
     helper model = let pop = collection . extractPop $ model
                        indices = IntMap.keys pop
                        indexPairs = pairs indices
-                       withinDistance (i1, i2) = pred $ d (pop IntMap.! i1) (pop IntMap.! i2) 
+                       withinDistance (i1, i2) = connected (pop IntMap.! i1) (pop IntMap.! i2) 
                    in fromEdges indices indices (filter withinDistance indexPairs)
+
+distanceBased :: Num n => (a -> a -> n) -> 
+                 (n -> Bool) -> 
+                (model -> ReactiveOutput a) -> 
+                    ModelWire model ManyToMany
+distanceBased d pred = predicate (\ a b -> pred $ d a b)
 
 euclidean :: [a -> Double] -> a -> a -> Double
 euclidean = normed 2
@@ -275,8 +327,13 @@ normed :: Double -> [a -> Double] -> a -> a -> Double
 normed p accessors p1 p2 = norm (diffs accessors p1 p2)
     where norm diffs = sum (map (**p) diffs) ** (1/p)
 
+{-
+grid8 :: Int -> (a -> (Int, Int)) -> (model -> ReactiveOutput a) -> ModelWire model ManyToMany
+grid8 resolution coords extractPop = function helper where
+    helper model = let pop = collection . extractPop $ model
+                       indices = 
 
-                       
+          -}             
                        
                        
 
