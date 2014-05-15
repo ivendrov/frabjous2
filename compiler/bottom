@@ -1,7 +1,7 @@
 -- OUTPUT
 model = createModel modelStructure initialState (mkStdGen 3)
 
-observers = [{-(processStatistics statistics, stderr) , -} (toGUI, stdout)]
+observers = [(processStatistics statistics, stderr), (toGUI, stdout)]
 
 main = do 
   args <- getArgs
@@ -25,31 +25,30 @@ initialJSON = object [ "height" .= height,
 
 
 radius :: Int
-radius = 10
+radius = cellSize `div` 3
 circle, line :: Text
 circle = "circle"
 line = "line"
-stateToColor :: State -> Text
+stateToColor :: Bool -> Text
 currentTime :: Double
 currentTime = 0.0
 black :: Text
 black = "black"
 stateToColor state = case state of 
-			S -> "yellow"
-			I -> "red"
-			R -> "blue"
+			True -> "red"
+			False -> "black"
 
 
 instance ToJSON Agent where
-	 toJSON (Person {x, y, state, ..}) = 
+	 toJSON (Cell {x, y, alive}) = 
 	 	object [ "shape" .= circle
 		       , "x" .= x
 		       , "y" .= y
 		       , "r" .= radius
-		       , "color" .= stateToColor state ]
+		       , "color" .= stateToColor alive ]
 
 toLine :: (Agent, Agent) -> Value
-toLine (Person {x = x1, y = y1, state = state1}, Person {x = x2, y = y2, state = state2}) = 
+toLine (Cell {x = x1, y = y1, alive = alive1}, Cell {x = x2, y = y2, alive = alive2}) = 
        object [ "shape" .= line
               , "x1" .= x1
 	      , "x2" .= x2
@@ -59,8 +58,8 @@ toLine (Person {x = x1, y = y1, state = state1}, Person {x = x2, y = y2, state =
 
 instance ToJSON (ModelOutput Agent) where
 	 toJSON m = 
-	 	let agents = IntMap.elems . collection . people $ m
-		    pairs = agentPairs (nbhdNetwork m) (people m) (people m)
+	 	let agents = IntMap.elems . collection . cells $ m
+		    pairs = agentPairs (nbhdNetwork m) (cells m) (cells m)
 		    lines = map toLine pairs
 		    array = Array (Vector.fromList ( lines ++ map toJSON agents))
 		in object [ "objects" .= array]

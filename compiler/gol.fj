@@ -28,4 +28,10 @@ cellSize = 50
 
 initialCells = [Cell x y alive | x <- [0, 0 + cellSize .. width], 
                                  y <- [100, 100 + cellSize .. height],
-                                 let alive = y >= 200 && y <= 300 && x == 250]
+                                 let alive = (x,y) `elem` initialAlive]
+
+initialAlive = [(100, 100),
+                (200, 100),
+                (150, 150),
+                (200, 150),
+                (150, 200)]
