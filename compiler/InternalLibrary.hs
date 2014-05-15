@@ -326,9 +326,9 @@ data ModelStructure a = ModelStructure { populationNames, networkNames :: [Strin
 
 
 
-type NetworkGenerator = [Int] -> [Int] -> ModelMonad ManyToMany
+type NetworkGenerator a = IntMap a -> IntMap a -> ModelMonad ManyToMany
 data InitialState a = InitialState { initialPopulations :: Map String [a],
-                                     initialNetworks :: Map String NetworkGenerator}
+                                     initialNetworks :: Map String (NetworkGenerator a)}
 
 
 
@@ -354,8 +354,8 @@ initialModelState structure initialState = do
                                                                 removed = IntSet.empty,
                                                                 added = IntSet.empty}
       indexedInitialPops = mapZipWith initialPopulationOutput ids (initialPopulations initialState)
-
-      tieWithPopulations initNetwork (pop1, pop2) = initNetwork (ids Map.! pop1) (ids Map.! pop2)
+      getInitialPop pop = collection $ indexedInitialPops Map.! pop
+      tieWithPopulations initNetwork (pop1, pop2) = initNetwork (getInitialPop pop1) (getInitialPop pop2)
       initNetworkActions = mapZipWith tieWithPopulations (initialNetworks initialState) (networkPopulations structure)
   networks <- Traversable.sequence initNetworkActions
   let initialOutput = ModelOutput {populations = indexedInitialPops,
