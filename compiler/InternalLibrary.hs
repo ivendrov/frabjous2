@@ -118,6 +118,12 @@ data ReactiveOutput a = ReactiveOutput {collection :: Collection a,
                                         removed, added :: IntSet}
 indices :: ReactiveOutput a -> [Int]
 indices = IntMap.keys . collection
+
+deadIDs :: ReactiveOutput a -> [Int]
+deadIDs = IntSet.toList . removed
+
+current :: ReactiveOutput a -> [a]
+current = IntMap.elems . collection
 -- TODO add other accessors to reactiveOutput 
 type ReactiveCollection input a = WireP input (ReactiveOutput a)
 
@@ -292,7 +298,10 @@ evolveModel (ModelState populationWires networkWires) =
     -- 2. evolve the networks
     networkResults <- Traversable.mapM (\n -> stepWire n dt outputAfterPop) networkWires
     let networkWires' = Map.map snd networkResults
-        networkOutputs = Map.map (fromRight . fst) networkResults
+        networkOutputs = Map.mapWithKey extractOutput networkResults
+        extractOutput name (output, _) = case output of 
+                                           Right x -> x
+                                           Left _ -> (networks input) ! name -- if network wire produces nothing, use previous value
         output = outputAfterPop {networks = networkOutputs}  
 
     return (Right output, evolveModel (ModelState populationWires' networkWires'))
