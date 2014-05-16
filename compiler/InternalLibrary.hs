@@ -217,8 +217,8 @@ class Network n where
     view1 :: n -> Int -> Collection a -> [a]
     view2 :: n -> Int -> Collection a -> [a]
 
-    addEdges1 :: ToMany -> n -> n
-    addEdges2 :: ToMany -> n -> n
+    addEdges1, addEdges2, removeEdges1, removeEdges2 :: ToMany -> n -> n
+    
 
     -- | removes a set of vertices from the first population
     removeVertices1 :: [Int] -> n -> n
@@ -240,6 +240,9 @@ instance Network SymmetricNetwork where
     addEdges1 edges network = let u = IntMap.unionWith IntSet.union 
                               in network `u` edges `u` (networkTranspose edges)
     addEdges2 = addEdges1
+    removeEdges1 edges network = let u = IntMap.unionWith IntSet.difference
+                                 in network `u` edges `u` (networkTranspose edges)
+    removeEdges2 = removeEdges1
 
     removeVertices1 indices network = foldr IntMap.delete network indices
     removeVertices2 indices network = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
@@ -263,6 +266,10 @@ instance Network ManyToMany where
                       in u edges *** u (networkTranspose edges)
     addEdges2 edges = let u = IntMap.unionWith IntSet.union
                       in u (networkTranspose edges) *** u edges
+
+    removeEdges1 edges = let u = IntMap.unionWith IntSet.difference
+                         in u edges *** u (networkTranspose edges)
+    removeEdges2 = removeEdges1 -- TODO fix
 
     removeVertices1 removed (n1, n2) = (removeVertices1 removed n1, removeVertices2 removed n2)
     removeVertices2 removed (n1, n2) = (removeVertices2 removed n1, removeVertices1 removed n2)
