@@ -218,6 +218,9 @@ class Network n where
     view2 :: n -> Int -> Collection a -> [a]
 
     addEdges1, addEdges2, removeEdges1, removeEdges2 :: ToMany -> n -> n
+    addEdges, removeEdges :: [(Int, Int)] -> n -> n
+    addEdges edges n = addEdges1 (fromEdges (vertices1 n) (vertices2 n) edges) n 
+    removeEdges edges n = removeEdges1 (fromEdges (vertices1 n) (vertices2 n) edges) n
     
 
     -- | removes a set of vertices from the first population
