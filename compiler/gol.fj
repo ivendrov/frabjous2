@@ -13,7 +13,6 @@ agent Cell {
 
 
 population cells of Cell
---addition = noise (draw 1 personDistribution) . rate . constant 1
 
 network nbhdNetwork 
 between many neighbors in cells = const never              

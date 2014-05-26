@@ -248,6 +248,10 @@ symmetrify edges = edges ++ map swap edges
 emptyNetwork :: (MonadRandom m) => [Int] -> [Int] -> m ManyToMany
 emptyNetwork v1 v2 = return $ fromEdges v1 v2 []
 
+
+
+
+
 randomNetwork, poissonSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
 -- randomNetwork rng fraction size = a random network with the given integer vertices. 
 -- each directed edge has a given probability of existing
@@ -268,6 +272,30 @@ poissonSymmetricNetwork fraction vertices _ = do
                 v <- vertices, u < v]      
   return $ fromEdges vertices vertices (symmetrify edges)
 
+
+type MaybeOneToOne = (IntMap Int, IntMap (Maybe Int))
+-- SCHELLING SEGREGATION NETWORK
+schelling :: (a -> a -> Bool) -> ManyToMany -> IntMap a -> IntMap a -> ModelMonad ManyToMany -- except it shouldn't be many to many
+-- original schelling model - 1D cellular automaton, go from left to right, if encounter a 
+-- discontent, insert it at the closest point at which it will be content, iterate until no discontents
+-- feels so very un-frabjous-like... maybe Ross was right... 
+-- this network function could just as easily move one agent per timestep, right? Maybe do that first!
+schelling constraint oldNetwork pop1 pop2 = 
+    let oldEdges = toEdges oldNetwork
+        edgeConstraint (i,j) = constraint (pop1 IntMap.! i) (pop2 IntMap.! j)
+        (happy, unhappy) = partition edgeConstraint oldEdges
+        newNetwork = case unhappy of
+                       [] -> oldNetwork -- no change needed
+                       ((i, j) : _) -> addEdges [(i, newLoc i)] . removeEdges [(i, j)] $ oldNetwork
+        newLoc i = extract $ find (emptyAndHappy) (vertices2 oldNetwork) where
+            emptyAndHappy j = empty j && happy j
+            empty j = null (view2 oldNetwork j pop2)
+            happy j = edgeConstraint (i,j)
+            extract (Just x) = x
+            extract Nothing = error "in schelling type network, no place for unhappy agent to move"
+    in return newNetwork
+        
+        
 
 
 
