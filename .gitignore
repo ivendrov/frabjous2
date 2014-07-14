@@ -1,9 +1,9 @@
-LaTeX/
+doc/LaTeX/
 *~
+*.dyn_hi
+*.dyn_o
 *.hi
 *.o
 *.class
-accelerate/
-netwire/
-eclipse/
 .DS_Store
+/.dist-buildwrapper

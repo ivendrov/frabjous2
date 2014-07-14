@@ -1,0 +1,8 @@
+#!/bin/sh
+
+../dist/build/Compiler/Compiler < frabjous-src/${1}.fj > middle
+cat top middle bottom > output/${1}.hs
+ghc output/${1}.hs InternalLibrary.hs StandardLibrary.hs
+rm middle
+
+

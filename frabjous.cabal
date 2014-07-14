@@ -1,0 +1,20 @@
+name:                frabjous
+version:             0.1.0.0
+synopsis:            A compiler for Frabjous, a domain-specific language for agent-based modelling based on FRP.
+-- description:         
+-- license:             
+license-file:        LICENSE
+author:              Ivan Vendrov
+maintainer:          ivendrov@gmail.com
+-- copyright:           
+category:            Language
+cabal-version:       >=1.10
+
+
+executable Compiler
+  main-is:           Compiler.hs           
+  -- other-modules:       
+  other-extensions:    NamedFieldPuns, RecordWildCards, OverloadedStrings, TemplateHaskell, TypeOperators, DeriveDataTypeable, ScopedTypeVariables, NoMonomorphismRestriction, TypeSynonymInstances, FlexibleInstances, MultiParamTypeClasses
+  build-depends:       base >=4.7 && <4.8, containers >=0.5 && <0.6, MonadRandom >=0.1 && <0.2, mtl >=2.2 && <2.3, netwire >=4.0 && <4.1, fclabels >=2.0 && <2.1, parsec >=3.1 && <3.2, regex-compat >=0.95 && <0.96, haskell-src-exts >=1.15 && <1.16, syb >=0.4 && <0.5
+  hs-source-dirs:      src    
+  default-language:    Haskell2010
