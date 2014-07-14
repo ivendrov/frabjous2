@@ -76,7 +76,7 @@ where
 
 import InternalLibrary
 import Prelude hiding ((.), id, length, Real)
-import Control.Monad.Random
+import Control.Monad.Random hiding (uniform)
 import Data.Traversable as Traversable hiding (for)
 import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, WireM, EventM, LastException, 
                      (<|>), after, delay, for, andThen, edge,
@@ -102,12 +102,12 @@ length :: (Num n) => [a] -> n
 length = fromIntegral . Data.List.length
 
 -- | counts the number of elements that satisfy the given predicate
-count :: Num n => (a -> Bool) -> [a] -> n
+count :: (a -> Bool) -> [a] -> Integer
 count pred = length . filter pred
 
 -- | determines the fraction of elements satisfying the given predicate
 fraction :: (a -> Bool) -> [a] -> Double
-fraction pred l = count pred l / length l
+fraction pred l = fromIntegral (count pred l) / length l
 
 -- | finds the average of a list of numbers
 average :: [Double] -> Double
