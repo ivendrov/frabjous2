@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Parser
+-- Module      :  Frabjous.Compiler.Parser
 -- Copyright   :  (c) University of Saskatchewan 2013
 -- License     :  BSD-style 
 -- 
@@ -10,7 +10,7 @@
 --
 -- The Parser for the Frabjous programming language
 --------------------------------------------------------------------------------------------------------------
-module Parser (parseProgram) where
+module Frabjous.Compiler.Parser (parseProgram) where
 
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
@@ -21,7 +21,7 @@ import Data.List (intercalate)
 import Text.Printf (printf)
 import Text.Regex (subRegex, mkRegex) -- used for reactive syntax
 
-import Syntax
+import Frabjous.Compiler.Syntax
 
 -- LEXICAL ISSUES
 agentKeyword = "agent"

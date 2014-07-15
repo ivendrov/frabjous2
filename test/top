@@ -28,8 +28,8 @@ import qualified Data.Vector as Vector
 import qualified Data.ByteString.Lazy as ByteString
 
 
-import StandardLibrary
-import InternalLibrary
+import Frabjous.StdLib
+import Frabjous.StdLib.Internal
 
 
 import Data.Map (Map, (!))

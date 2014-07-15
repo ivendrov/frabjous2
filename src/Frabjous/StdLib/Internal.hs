@@ -1,7 +1,7 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  InternalLibrary
--- Copyright   :  (c) University of Saskatchewan 2013
+-- Module      :  Frabjous.StdLib.Internal
+-- Copyright   :  (c) University of Saskatchewan 2014
 -- 
 -- Maintainer  :  ivan.vendrov@usask.ca
 --
@@ -21,7 +21,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module InternalLibrary -- TODO only export what needs to be exported
+module Frabjous.StdLib.Internal -- TODO only export what needs to be exported
 where
 
 -- NOTE: by default, sequence operations are VECTOR ones

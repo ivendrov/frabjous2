@@ -7,7 +7,7 @@
 --
 -- The Frabjous standard library
 --------------------------------------------------------------------------
-module StandardLibrary 
+module Frabjous.StdLib
  (Real,
   -- UTILITY FUNCTIONS
   clip,
@@ -74,7 +74,7 @@ module StandardLibrary
   normed)
 where
 
-import InternalLibrary
+import Frabjous.StdLib.Internal
 import Prelude hiding ((.), id, length, Real)
 import Control.Monad.Random hiding (uniform)
 import Data.Traversable as Traversable hiding (for)

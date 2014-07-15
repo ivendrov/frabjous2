@@ -1,6 +1,6 @@
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Compiler
+-- Module      :  Frabjous.Compiler.Main
 -- Copyright   :  (c) University of Saskatchewan 2013
 -- 
 -- Maintainer  :  ivan.vendrov@usask.ca
@@ -10,9 +10,9 @@
 
 -- Frabjous imports
 import Debug.Trace
-import Syntax
-import qualified Parser
-import qualified CodeGen
+import Frabjous.Compiler.Syntax
+import qualified Frabjous.Compiler.Parser as Parser
+import qualified Frabjous.Compiler.CodeGen as CodeGen
 
 
 

@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  Syntax
+-- Module      :  Frabjous.Compiler.Syntax
 -- Copyright   :  (c) University of Saskatchewan 2013
 -- 
 -- Maintainer  :  ivan.vendrov@usask.ca
@@ -9,7 +9,7 @@
 -- The abstract syntax for the Frabjous programming language,
 -- with some non-compiler-specific utility functions
 -----------------------------------------------------------------------------
-module Syntax where 
+module Frabjous.Compiler.Syntax where 
 
 import Data.Map (Map)
 import qualified Data.Map as Map

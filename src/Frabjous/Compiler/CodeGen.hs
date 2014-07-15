@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 -----------------------------------------------------------------------------
 -- |
--- Module      :  CodeGen
+-- Module      :  Frabjous.Compiler.CodeGen
 -- Copyright   :  (c) University of Saskatchewan 2013
 -- 
 -- Maintainer  :  ivan.vendrov@usask.ca
@@ -10,7 +10,7 @@
 -- The Code Generator for the Frabjous programming language
 -- (given a Frabjous model, generates the Haskell code for it, minus header and footer info)
 --------------------------------------------------------------------------
-module CodeGen (generateCode) where 
+module Frabjous.Compiler.CodeGen (generateCode) where 
 
 
 
@@ -22,8 +22,8 @@ import Data.Char (toUpper)
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
 
-import Syntax
-import qualified Transform
+import Frabjous.Compiler.Syntax
+import qualified Frabjous.Compiler.Transform as Transform
 
 -- capitalizes the first letter of a given attribute
 capitalize [] = []
