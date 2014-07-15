@@ -9,22 +9,25 @@
 --------------------------------------------------------------------------
 module Frabjous.StdLib
  (Real,
-  -- UTILITY FUNCTIONS
+ 
+  -- * Utility Functions
   clip,
   length,
   count,
   fraction,
   average,
   stepWire,
-  -- RANDOM NUMBERS
+  
+  -- * Random Numbers
   uniform,
   frequencies,
   draw,
-  -- WIRE COMBINATORS
-  -- | simple combinators
+  
+  -- * Wire Combinators
+  -- ** simple combinators
   constant,
   function, 
-  -- | event combinators
+  -- ** event combinators
   (<|>),
   edge,
   changed,
@@ -34,41 +37,43 @@ module Frabjous.StdLib
   for,
   delay,
 
-  -- | real numbers
+  -- ** real numbers
   integrate,
   randomWalk,
 
-  -- | randomness
+  -- ** randomness
   noise,
   poisson,
   countingPoisson,
   rate,
 
-  -- | functions that take wires as parameters & analyze them somehow
+  -- ** functions that take wires as parameters & analyze them somehow
   accumulate,
   countEvents,
   onChange,
+  internalStateT,
+  internalState,
 
-  -- | switches 
+  -- ** switches 
   switch,
   stateDiagram,
-
-
-  -- NETWORKS
-  -- static networks
+  
+  -- * Networks
+  -- ** static networks
   emptyNetwork,
   randomNetwork,
   randomSymmetricNetwork,
   poissonSymmetricNetwork,
   predicate,
   gridWithDiags,
-  -- dynamic networks
+  
+  -- ** dynamic networks
   memorylessSymmetric,
   randomSymmetric,
   poissonRandomSymmetric,
   distanceBased,
 
-  -- auxiliary functions
+  -- ** auxiliary functions
   manhattan,
   euclidean,
   normed)
@@ -165,6 +170,10 @@ randomWalk init distribution = integrate init . noise distribution
 
 -- | (TODO REFACTOR?) internalStateT applies the given transition function
 -- | to the timestep, input, and state at every step, then outputs the new state
+internalStateT :: 
+        (Double -> a -> s -> s) -- ^ the transition function
+         -> s -- ^ the initial state
+         -> Wire e m a s
 internalStateT transition init = mkState init $ \dt (x, state) -> 
                                  let newState = transition dt x state
                                  in newState `seq` (Right newState, newState)
