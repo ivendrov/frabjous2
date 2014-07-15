@@ -52,6 +52,7 @@ data Program = Program { agents :: Map Name Agent,
                          initial :: Map Name HaskellBlock,
                          otherCode :: [HaskellBlock]} deriving (Show)
 
+emptyProgram :: Program
 emptyProgram = Program { agents = Map.empty,
                          populations = Map.empty,
                          networks = Map.empty,

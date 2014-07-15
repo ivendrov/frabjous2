@@ -9,13 +9,11 @@
 ------------------------------------------------------------------------------
 
 -- Frabjous imports
-import Debug.Trace
-import Frabjous.Compiler.Syntax
 import qualified Frabjous.Compiler.Parser as Parser
 import qualified Frabjous.Compiler.CodeGen as CodeGen
 
 
-
+main :: IO ()
 main = do
   contents <- getContents
   putStrLn (process contents)

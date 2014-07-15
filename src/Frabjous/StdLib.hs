@@ -78,7 +78,7 @@ import Frabjous.StdLib.Internal
 import Prelude hiding ((.), id, length, Real)
 import Control.Monad.Random hiding (uniform)
 import Data.Traversable as Traversable hiding (for)
-import Control.Wire (arr, mkGen, mkPure, mkState, (.), Wire, WireM, EventM, LastException, 
+import Control.Wire (mkGen, mkState, (.), Wire, WireM, EventM, LastException, 
                      (<|>), after, delay, for, andThen, edge,
                      changed)
 import qualified Control.Wire as Wire
@@ -87,8 +87,6 @@ import Data.Tuple (swap)
 import Data.List hiding (length)
 import qualified Data.List
 import qualified Data.IntMap as IntMap
-import Data.IntMap (IntMap)
-
 type Real = Double
 
 -- -1. UTILITY FUNCTIONS
@@ -263,9 +261,7 @@ randomNetwork fraction vertices1 vertices2 = do
 -- each UNDIRECTED edge has a "fraction" probability of existing
 poissonSymmetricNetwork fraction vertices _ = do
   randoms <- getRandoms
-  let edges = map snd . filter ((<fraction) . fst) . zip randoms $ 
-               [(u,v) | u <- vertices, 
-                v <- vertices, u < v]      
+  let edges = map snd . filter ((<fraction) . fst) . zip randoms $ pairs vertices     
   return $ fromEdges vertices vertices (symmetrify edges)
 
 

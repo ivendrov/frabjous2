@@ -14,9 +14,8 @@ module Frabjous.Compiler.CodeGen (generateCode) where
 
 
 
-import Data.Maybe (mapMaybe, fromMaybe, fromJust, isJust)
+import Data.Maybe (isJust)
 import Data.List
-import Data.Function (on)
 import Text.Printf (printf)
 import Data.Char (toUpper)
 import Data.Map (Map, (!))
@@ -26,6 +25,7 @@ import Frabjous.Compiler.Syntax
 import qualified Frabjous.Compiler.Transform as Transform
 
 -- capitalizes the first letter of a given attribute
+capitalize, toAccessor, toInit :: String -> String
 capitalize [] = []
 capitalize (h : t) = toUpper h : t
 
@@ -55,7 +55,7 @@ showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
     let showAgent (name, (Agent attributes)) = 
             printf "%s { %s }" name (intercalate ", " . map (showAttr) $ attributes)
-        showAttr (Attribute {name, annotation, code}) = printf "%s %s" name annotation
+        showAttr (Attribute {name, annotation, code =_}) = printf "%s %s" name annotation
     in printf "data Agent = %s deriving Show\n" 
        (intercalate " | " . map (showAgent) $ Map.toList agents)
        ++ showAttributeAccessors (nub . concatMap (map name . attributes) $ Map.elems agents)
@@ -64,6 +64,7 @@ showAttributeAccessors :: [Name] -> String
 showAttributeAccessors = unlines . map showAccessor where
     showAccessor name = printf "%s = %s" (toAccessor name) name
  
+showPopulationDeclarations, showNetworkDeclarations :: [Name] -> String 
 showPopulationDeclarations = unlines . map showDec where
     showDec n = printf "%s = (Map.! \"%s\") . populations" n n
 
@@ -73,6 +74,8 @@ showNetworkDeclarations = unlines . map showDec where
 -- HELPERS 
 genDecs :: [String] -> String
 genDecs strs = printf "{ %s }" (intercalate "; " strs)
+
+linearize, prettify, desugar :: String -> String
 linearize x = case Transform.linearizeDecl x of
                  Left err -> error err
                  Right str -> str
@@ -85,8 +88,9 @@ desugar x = case Transform.desugarDecl x of
               Left err -> error err
               Right str -> str
 
+toMap :: (String -> String) -> [String] -> String
 toMap op = printf "Map.fromList [%s]" . intercalate ","  . map (pair op) where
-    pair op name = printf "(%s, %s)" (show name) (op name)
+                pair op name = printf "(%s, %s)" (show name) (op name)
 
 -- END HELPERS
 -- showAgentWire populations networks attributes agent
@@ -95,8 +99,7 @@ showAgentWire :: Map Name Name -> Map Name NetworkContext -> (Name, Agent) -> St
 showAgentWire populations networks (agentName, Agent attributes)  = prettify $
     printf "wire%s g id initAgent = purifyRandom (helper %s) g where %s"
            agentName (unwords localWireNames) (genDecs localDecs)
-    where fromRight (Right x) = x 
-          fieldNames = map name attributes
+    where fieldNames = map name attributes
           activeFieldNames = map name activeAttributes
           localWireNames = map (printf "%sWire") activeFieldNames
           localDecs = [helper] ++ env ++ localWires
@@ -172,7 +175,7 @@ showStats statistics = unlines (mainDec : statDecs) where
     mainDec = "statistics = " ++ toMap ("arr show . "++) (Map.keys statistics)
     statDecs = zipWith (printf "%s = %s") (Map.keys statistics) (map contents (Map.elems statistics))
 
-
+showInitialState :: Map Name Population  -> Map Name Network -> Map Name HaskellBlock -> String
 showInitialState populations networks initials = prettify $
     printf "initialState = do {startingPops <- startingPopulations; \
                                \return $ InitialState startingPops startingNetworks} where %s"

@@ -27,25 +27,16 @@ where
 -- NOTE: by default, sequence operations are VECTOR ones
 import Prelude hiding ((.), id, all, foldr)
 import Data.Foldable
-import Control.Monad hiding (when)
-import Control.Monad.Random (RandomGen, Rand, runRand, RandT, runRandT, getSplit, evalRand)
+import Control.Monad.Random (Rand, runRand, RandT, runRandT, getSplit, evalRand)
 import Control.Monad.State (State)
 import qualified Control.Monad.State as State
 import Control.Arrow
 import Control.Wire
-import Text.Printf
 import qualified Data.List as List
 import System.IO
 
-import Data.Ord
-import Data.Monoid
-import Data.Maybe (isJust, fromJust)
-import Data.Function (on)
 import Data.Tuple (swap)
-import Data.Label
-import Data.Typeable
 import qualified Data.Traversable as Traversable
-import Data.Either (partitionEithers)
 
 import Data.Map (Map, (!))
 import qualified Data.Map as Map
@@ -250,7 +241,7 @@ instance Network SymmetricNetwork where
     removeVertices2 indices network = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
 
     toEdges  = List.concatMap (\(i, adj) -> map ((,) i) (IntSet.toList adj)) . IntMap.toList
-    fromEdges vertices1 vertices2 edges = let adjLists = IntMap.fromList (zip vertices1 (repeat IntSet.empty))
+    fromEdges vertices1 _ edges = let adjLists = IntMap.fromList (zip vertices1 (repeat IntSet.empty))
                                  in foldr (\(i1,i2) -> IntMap.adjust (IntSet.insert i2) i1) 
                                     adjLists 
                                     edges
@@ -416,10 +407,10 @@ runModelIO modelWire observers timestep = loop modelWire (map fst observers) whe
       let (mx, w') = stepWireP w timestep ()
 
       case mx of 
-        Left ex -> return ()
+        Left _ -> return ()
         Right x -> do let (outputs, wires') = stepWiresP wires timestep x
                           genAction handle (Right str) = hPutStr handle str
-                          genAction handle (Left _) = return ()
+                          genAction _ (Left _) = return ()
                           actions = zipWith genAction handles outputs
                       Traversable.sequence actions
                       loop w' wires'
