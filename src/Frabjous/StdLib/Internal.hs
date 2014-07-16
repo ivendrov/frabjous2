@@ -45,6 +45,8 @@ import qualified Data.IntMap as IntMap
 import Data.IntSet (IntSet)
 import qualified Data.IntSet as IntSet
 
+import qualified Frabjous.Compiler.Syntax as Syntax
+
 
 -- FRABJOUS STANDARD LIBRARY
 
@@ -118,11 +120,11 @@ current = IntMap.elems . collection
 type ReactiveCollection input a = WireP input (ReactiveOutput a)
 
 
-type RemovalWire a = ModelWire (ModelOutput a) IntSet
-type AdditionWire a = ModelWire (ModelOutput a) [a]
-data PopulationState a = PopulationState { agentWires :: Collection (AgentWire (ModelOutput a) a),
-                                                 removal :: RemovalWire a, --death
-                                                 addition :: AdditionWire a} 
+type RemovalWire a e= ModelWire (ModelOutput a e) IntSet
+type AdditionWire a e= ModelWire (ModelOutput a e) [a]
+data PopulationState a e= PopulationState { agentWires :: Collection (AgentWire (ModelOutput a e) a),
+                                                 removal :: RemovalWire a e, --death
+                                                 addition :: AdditionWire a e} 
                                                  -- TODO have addition also return birth-added links to specific networks
 
 
@@ -164,10 +166,10 @@ type PopulationWire model a  =
 
 -- evolve the local properties of the population (unrelated to networks)
 -- i.e modify each agent locally, then apply death and birth 
-evolvePopulation :: (ModelOutput a -> ReactiveOutput a) ->
-                     (StdGen -> ID -> a -> AgentWire (ModelOutput a) a) ->
-                     PopulationState a ->
-                        PopulationWire (ModelOutput a) a 
+evolvePopulation :: (ModelOutput a e-> ReactiveOutput a) ->
+                     (StdGen -> ID -> a -> AgentWire (ModelOutput a e) a) ->
+                     PopulationState a e ->
+                        PopulationWire (ModelOutput a e) a 
 evolvePopulation extractPop createAgent state = helper state where
     helper  (PopulationState agentWires removal addition) = 
         mkGen $ \dt modelStateP -> do
@@ -189,103 +191,90 @@ evolvePopulation extractPop createAgent state = helper state where
                            
           return (Right output, helper (PopulationState newWires removal' addition'))
 
--- C. Networks
-  
+-------------------------------
+-- B. Networks
+-------------------------------
 
-type ToMany = IntMap IntSet
-networkTranspose :: (Network n) => n -> n
-networkTranspose n  = fromEdges (vertices1 n) (vertices2 n) . map swap . toEdges $ n
---type ToOne = IntMap Int
---type ToMaybeOne = IntMap (Maybe Int)
+data Edge e = Edge { index :: (Int, Int), edge :: e}
 
--- represents a general interface to a directed network, with (potentially) distinct sets
--- of source and destination vertices
-class Network n where 
-    vertices1 :: n -> [Int] 
-    vertices2 :: n -> [Int]
+reverseEdge :: Edge e -> Edge e
+reverseEdge e = e {index = swap (index e)}
 
-    view1 :: n -> Int -> Collection a -> [a]
-    view2 :: n -> Int -> Collection a -> [a]
 
-    addEdges1, addEdges2, removeEdges1, removeEdges2 :: ToMany -> n -> n
-    addEdges, removeEdges :: [(Int, Int)] -> n -> n
-    addEdges edges n = addEdges1 (fromEdges (vertices1 n) (vertices2 n) edges) n 
-    removeEdges edges n = removeEdges1 (fromEdges (vertices1 n) (vertices2 n) edges) n
+-- | The type of adjacency lists in a network. Distinguishes between agents connected to exactly one, possibly one, or many
+-- | other agents
+
+data Adj e = 
+          One e 
+        | MaybeOne (Maybe e) 
+        | Many [e] 
+        
+-- accessors
+fromMany :: Adj e -> [e]
+fromMany (Many es) = es
+fromMany _ = error "Internal error: called fromMany on Adj that isn't of type Many"
+
+fromMaybeOne :: Adj e -> Maybe e
+fromMaybeOne (MaybeOne e) = e
+fromMaybeOne _ = error "Internal error: called fromMaybeOne on Adj that isn't of type MaybeOne"
+
+fromOne :: Adj e -> e
+fromOne (One e) = e
+fromOne _ = error "Internal error: called fromOne on Adj that isn't of type One"
+
+                
+
+
+-- | methods networks need to have
+vertices1, vertices2 :: Network e -> [Int]
+view1, view2 :: Network e -> Int -> Adj (Edge e)
+addEdges :: [Edge e] ->Network e -> Network e
+removeEdges :: [(Int, Int)] -> Network e -> Network e
+toIds :: Network e -> [(Int, Int)]
     
+    -- TODO removeVertices1, removeVertices2,fromEdges
+    
+data Network e = Network { accesses :: (Syntax.Link, Syntax.Link), edges :: [Edge e] }
 
-    -- | removes a set of vertices from the first population
-    removeVertices1 :: [Int] -> n -> n
 
-    -- | removes a set of vertices from the second population
-    removeVertices2 :: [Int] -> n -> n
+vertices1 = map (fst . index) . edges
+vertices2 = map (snd . index) . edges
+     
+addEdges es network = network {edges = es ++ (edges network)}
+removeEdges lst network = network {edges = filter (\e -> not $ (index e) `List.elem` lst) (edges network)}
+     
+view1 (Network {accesses = (a1, _), edges}) i = 
+        case a1 of
+                Syntax.One -> undefined -- TODO
+                Syntax.MaybeOne -> undefined -- TODO
+                Syntax.Many -> Many $ filter (\e -> fst (index e) == i) edges -- TODO optimize by precomputing!
+view2 (Network accesses edges) = view1 (Network (swap accesses) (map reverseEdge edges))
 
-    fromEdges :: [Int] -> [Int] -> [(Int, Int)] -> n
-    toEdges :: n -> [(Int, Int)]
+toIds = map (index) . edges
+        
+     
 
-type SymmetricNetwork = ToMany
-instance Network SymmetricNetwork where
-    vertices1 = IntMap.keys 
-    vertices2 = vertices1
+     
 
-    view1 network index collection = map (collection IntMap.!) $ IntSet.elems (network IntMap.! index)
-    view2 = view1
 
-    addEdges1 edges network = let u = IntMap.unionWith IntSet.union 
-                              in network `u` edges `u` (networkTranspose edges)
-    addEdges2 = addEdges1
-    removeEdges1 edges network = let u = IntMap.unionWith IntSet.difference
-                                 in network `u` edges `u` (networkTranspose edges)
-    removeEdges2 = removeEdges1
-
-    removeVertices1 indices network = foldr IntMap.delete network indices
-    removeVertices2 indices network = IntMap.map (IntSet.\\ (IntSet.fromList indices)) network
-
-    toEdges  = List.concatMap (\(i, adj) -> map ((,) i) (IntSet.toList adj)) . IntMap.toList
-    fromEdges vertices1 _ edges = let adjLists = IntMap.fromList (zip vertices1 (repeat IntSet.empty))
-                                 in foldr (\(i1,i2) -> IntMap.adjust (IntSet.insert i2) i1) 
-                                    adjLists 
-                                    edges
-
-type ManyToMany = (ToMany, ToMany)
-instance Network ManyToMany where
-  
-    vertices1 = vertices1 . fst
-    vertices2 = vertices2 . snd
-
-    view1 = view1 . fst
-    view2 = view1 . snd
-
-    addEdges1 edges = let  u = IntMap.unionWith IntSet.union 
-                      in u edges *** u (networkTranspose edges)
-    addEdges2 edges = let u = IntMap.unionWith IntSet.union
-                      in u (networkTranspose edges) *** u edges
-
-    removeEdges1 edges = let u = IntMap.unionWith IntSet.difference
-                         in u edges *** u (networkTranspose edges)
-    removeEdges2 = removeEdges1 -- TODO fix
-
-    removeVertices1 removed (n1, n2) = (removeVertices1 removed n1, removeVertices2 removed n2)
-    removeVertices2 removed (n1, n2) = (removeVertices2 removed n1, removeVertices1 removed n2)
-
-    toEdges = toEdges . fst
-    fromEdges vertices1 vertices2 = fromEdges vertices1 vertices1 &&& fromEdges vertices2 vertices2 . map swap
 
 networkView id viewer networkAccess populationAccess = 
     arr (\s -> viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s))
 
-agentPairs network pop1 pop2 = map peeps (toEdges network) where
-    peeps (id1, id2) = (collection pop1 IntMap.! id1, collection pop2 IntMap.! id2)
+agentPairs :: Network e -> ReactiveOutput a -> ReactiveOutput a -> [(a, a)]
+agentPairs network pop1 pop2 = map peeps (toIds network) where
+    peeps (id1, id2) = ((collection pop1) IntMap.! id1, collection pop2 IntMap.! id2)
     
 
 
 -- C) The model as a whole
 
-data ModelState a = ModelState { populationWires :: Map String (PopulationWire (ModelOutput a) a),
-                               networkWires :: Map String (ModelWire (ModelOutput a) ManyToMany)}
-data ModelOutput a = ModelOutput { populations :: Map String (ReactiveOutput a),
-                                 networks :: Map String ManyToMany}
+data ModelState a e = ModelState { populationWires :: Map String (PopulationWire (ModelOutput a e) a),
+                               networkWires :: Map String (ModelWire (ModelOutput a e) (Network e))}
+data ModelOutput a e = ModelOutput { populations :: Map String (ReactiveOutput a),
+                                 networks :: Map String (Network e)}
 
-evolveModel :: ModelState a -> ModelWire (ModelOutput a) (ModelOutput a)
+evolveModel :: ModelState a e -> ModelWire (ModelOutput a e) (ModelOutput a e)
 evolveModel (ModelState populationWires networkWires) =
   mkGen $ \dt input -> do
     -- 1. evolve the populations
@@ -313,11 +302,11 @@ mapZipWith f map1 map2 = Map.mapWithKey (\k -> f (map1 ! k)) map2
 mapZipWith3 :: Ord k => (a -> b -> c -> d) -> Map k a -> Map k b -> Map k c -> Map k d
 mapZipWith3 f map1 map2 map3= Map.mapWithKey (\k -> f (map1 ! k) (map2 ! k)) map3
 
-data ModelStructure a = ModelStructure { populationNames, networkNames :: [String],
-                                         removalWires :: Map String (RemovalWire a),
-                                         additionWires :: Map String (AdditionWire a),
-                                         newAgentWires :: Map String (StdGen -> ID -> a -> AgentWire (ModelOutput a) a),
-                                         networkEvolutionWires :: Map String (ModelWire (ModelOutput a) ManyToMany),
+data ModelStructure a e = ModelStructure { populationNames, networkNames :: [String],
+                                         removalWires :: Map String (RemovalWire a e),
+                                         additionWires :: Map String (AdditionWire a e),
+                                         newAgentWires :: Map String (StdGen -> ID -> a -> AgentWire (ModelOutput a e) a),
+                                         networkEvolutionWires :: Map String (ModelWire (ModelOutput a e) (Network e)),
                                          networkPopulations :: Map String (String, String)}
 
 
@@ -326,14 +315,14 @@ data ModelStructure a = ModelStructure { populationNames, networkNames :: [Strin
 
 
 
-type NetworkGenerator a = IntMap a -> IntMap a -> ModelMonad ManyToMany
-data InitialState a = InitialState { initialPopulations :: Map String [a],
-                                     initialNetworks :: Map String (NetworkGenerator a)}
+type NetworkGenerator a e = IntMap a -> IntMap a -> ModelMonad (Network e)
+data InitialState a e = InitialState { initialPopulations :: Map String [a],
+                                     initialNetworks :: Map String (NetworkGenerator a e)}
 
 
 
 
-initialModelState :: ModelStructure a -> InitialState a  -> ModelMonad (ModelState a, ModelOutput a)
+initialModelState :: ModelStructure a e -> InitialState a e -> ModelMonad (ModelState a e, ModelOutput a e)
 initialModelState structure initialState = do 
 
   indexedPops <- Traversable.sequence (mapZipWith genNewAgents (newAgentWires structure) 
@@ -364,7 +353,7 @@ initialModelState structure initialState = do
    (state, initialOutput)
 
 
-createModel :: ModelStructure a -> Rand StdGen (InitialState a) -> StdGen -> WireP () (ModelOutput a)
+createModel :: ModelStructure a e -> Rand StdGen (InitialState a e) -> StdGen -> WireP () (ModelOutput a e)
 createModel modelStructure initialState stdgen = 
     let initState = evalRand initialState stdgen
         initPair = (stdgen, 0)
@@ -374,8 +363,8 @@ createModel modelStructure initialState stdgen =
     in loopWire output pureModelWire
 
 -- STATISTICS
-type ObserverWire a s = WireP (ModelOutput a) s 
-type Statistics a = Map String (ObserverWire a String)
+type ObserverWire a e s = WireP (ModelOutput a e) s 
+type Statistics a e = Map String (ObserverWire a e String)
 
 
 -- TODO function that runs a list of wires and returns a list
@@ -385,7 +374,7 @@ stepWiresP wires dt input =
     in (map fst results, map snd results)
 
 -- generates a wire out of a map of statistics wires by pretty-printing the statistics and their names
-processStatistics :: Statistics a -> ObserverWire a String
+processStatistics :: Statistics a e -> ObserverWire a e String
 processStatistics stats = 
     mkPure $ \dt input -> 
         let results = Map.map (\val -> stepWireP val dt input) stats
@@ -396,11 +385,11 @@ processStatistics stats =
                      else ""
         in (Right output, processStatistics stats')
 
-type ObserverProcess a = (ObserverWire a String, Handle)
+type ObserverProcess a e = (ObserverWire a e String, Handle)
 
 
 
-runModelIO :: WireP () (ModelOutput a) -> [ObserverProcess a] -> Double -> IO ()
+runModelIO :: WireP () (ModelOutput a e) -> [ObserverProcess a e] -> Double -> IO ()
 runModelIO modelWire observers timestep = loop modelWire (map fst observers) where
     handles = map snd observers
     loop w wires = do

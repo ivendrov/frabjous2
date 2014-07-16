@@ -79,7 +79,7 @@ module Frabjous.StdLib
   normed)
 where
 
-import Frabjous.StdLib.Internal
+import Frabjous.StdLib.Internal hiding (edge)
 import Prelude hiding ((.), id, length, Real)
 import Control.Monad.Random hiding (uniform)
 import Data.Traversable as Traversable hiding (for)
