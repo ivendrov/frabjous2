@@ -30,7 +30,6 @@ import Data.Foldable
 import Control.Monad.Random (Rand, runRand, RandT, runRandT, getSplit, evalRand)
 import Control.Monad.State (State)
 import qualified Control.Monad.State as State
-import Control.Arrow
 import Control.Wire
 import qualified Data.List as List
 import System.IO

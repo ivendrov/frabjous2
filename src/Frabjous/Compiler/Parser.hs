@@ -15,11 +15,7 @@ module Frabjous.Compiler.Parser (parseProgram) where
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Token as Token
 import Text.Parsec.Language (haskellDef)
-import Control.Applicative ((<*), (<$>))
-import Data.Maybe (maybe)
-import Data.List (intercalate)
-import Text.Printf (printf)
-import Text.Regex (subRegex, mkRegex) -- used for reactive syntax
+import Control.Applicative ((<*))
 
 import Frabjous.Compiler.Syntax
 
