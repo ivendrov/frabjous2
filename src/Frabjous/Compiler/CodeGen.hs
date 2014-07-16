@@ -121,7 +121,7 @@ showAgentWire populations networks (agentName, Agent attributes)  = prettify $
           extractAttributes :: (Name, NetworkContext) -> [String]
           extractAttributes (networkName, Symmetric {population = population , access = (_, accessName)}) = 
               if populations Map.! population == agentName
-              then [printf "%s = networkView id view1 %s %s" accessName networkName population]
+              then [printf "%s = arr (fromMany) . networkView id view1 %s %s" accessName networkName population]
               else []
           -- TODO add cases for other network types
           initAttribute name = printf "%s = %s initAgent" (toInit name) (toAccessor name)

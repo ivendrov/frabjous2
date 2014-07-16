@@ -3,7 +3,7 @@
 agent Cell { 
     x :: Int;
     y :: Int;
-    alive t :: Bool = let liveNeighbors = count getAlive (neighbors t)
+    alive t :: Bool = let liveNeighbors = count getAlive (agents (neighbors t))
                       in if (alive t) 
                          then (liveNeighbors == 2 || liveNeighbors == 3)
                          else (liveNeighbors == 3)

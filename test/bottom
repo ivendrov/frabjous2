@@ -13,7 +13,7 @@ main = do
 
 
 
-toGUI :: WireP (ModelOutput Agent) String
+toGUI :: WireP (ModelOutput Agent ()) String
 toGUI = delay (toString initialJSON) . function (toString . toJSON)
 
 
@@ -56,7 +56,7 @@ toLine (Cell {x = x1, y = y1, alive = alive1}, Cell {x = x2, y = y2, alive = ali
 	      , "y2" .= y2 
 	      , "color" .= black]
 
-instance ToJSON (ModelOutput Agent) where
+instance ToJSON (ModelOutput Agent ()) where
 	 toJSON m = 
 	 	let agents = IntMap.elems . collection . cells $ m
 		    pairs = agentPairs (nbhdNetwork m) (cells m) (cells m)

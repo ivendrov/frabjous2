@@ -62,16 +62,20 @@ module Frabjous.StdLib
   -- ** static networks
   emptyNetwork,
   randomNetwork,
-  randomSymmetricNetwork,
-  poissonSymmetricNetwork,
   predicate,
   gridWithDiags,
+  {-
+  randomSymmetricNetwork,
+  poissonSymmetricNetwork,
+  
   
   -- ** dynamic networks
   memorylessSymmetric,
   randomSymmetric,
   poissonRandomSymmetric,
   distanceBased,
+  
+  -}
 
   -- ** auxiliary functions
   manhattan,
@@ -80,6 +84,7 @@ module Frabjous.StdLib
 where
 
 import Frabjous.StdLib.Internal hiding (edge)
+import qualified Frabjous.Compiler.Syntax as Syntax
 import Prelude hiding ((.), id, length, Real)
 import Control.Monad.Random hiding (uniform)
 import Data.Traversable as Traversable hiding (for)
@@ -252,10 +257,10 @@ pairs xs = [(u, v) | u <- xs, v <- xs, u < v]
 symmetrify edges = edges ++ map swap edges
 
 
-emptyNetwork :: (MonadRandom m) => [Int] -> [Int] -> m ManyToMany
-emptyNetwork v1 v2 = return $ fromEdges v1 v2 []
+emptyNetwork :: (MonadRandom m) => [Int] -> [Int] -> m (Network e)
+emptyNetwork v1 v2 = return $ Network (Syntax.Many, Syntax.Many) v1 v2 []
 
-randomNetwork, poissonSymmetricNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m ManyToMany
+randomNetwork :: (MonadRandom m) => Double -> [Int] -> [Int] -> m (Network ())
 -- randomNetwork rng fraction size = a random network with the given integer vertices. 
 -- each directed edge has a given probability of existing
 randomNetwork fraction vertices1 vertices2 = do 
@@ -263,9 +268,24 @@ randomNetwork fraction vertices1 vertices2 = do
     let edges = map snd . filter ((<fraction) . fst) . zip randoms $ 
             [(u,v) | u <- vertices1, 
                      v <- vertices2]
-    return $ fromEdges vertices1 vertices2 edges
+    return $ Network (Syntax.Many, Syntax.Many) vertices1 vertices2 (zipWith Edge edges (repeat ()))
+    
+    
+predicate :: (a -> a -> Bool) -> NetworkGenerator a () -- TODO generalize to any edge type
+predicate connected pop _ = 
+    let vertices = IntMap.toList pop
+        edges = [(i1, i2) | (i1, v1) <- vertices, (i2, v2) <- vertices, i1 < i2, connected v1 v2]
+        indices = IntMap.keys pop
+    in return $ Network (Syntax.Many, Syntax.Many) indices indices (zipWith Edge edges (repeat ()))
+    
+gridWithDiags :: Int -> [a -> Int] -> NetworkGenerator a () -- TODO generalize to any edge type
+gridWithDiags resolution coords = predicate connected where
+    connected a1 a2 = let x = map ($a1) coords
+                          y = map ($a2) coords
+                          diffs = map abs $ zipWith (-) x y
+                      in all (<= resolution) diffs
 
-
+{-
 -- poissonSymmetricNetwork is like a random network but for a single population 
 -- each UNDIRECTED edge has a "fraction" probability of existing
 poissonSymmetricNetwork fraction vertices _ = do
@@ -289,20 +309,10 @@ randomSymmetricNetwork prob pop _ = do
       indices = map fst vertices
   return $ fromEdges indices indices edges
 
-predicate :: (a -> a -> Bool) -> NetworkGenerator a
-predicate connected pop _ = 
-    let vertices = IntMap.toList pop
-        edges = [(i1, i2) | (i1, v1) <- vertices, (i2, v2) <- vertices, i1 < i2, connected v1 v2]
-        indices = IntMap.keys pop
-    in return $ fromEdges indices indices (symmetrify edges)
 
 
-gridWithDiags :: Int -> [a -> Int] -> NetworkGenerator a
-gridWithDiags resolution coords = predicate connected where
-    connected a1 a2 = let x = map ($a1) coords
-                          y = map ($a2) coords
-                          diffs = map abs $ zipWith (-) x y
-                      in all (<= resolution) diffs
+
+
   
 
 --  B) dynamic networks
@@ -338,11 +348,14 @@ predicate connected extractPop = function helper where
                    in fromEdges indices indices (symmetrify $ filter withinDistance indexPairs)
 -}
 
+
 distanceBased :: Num n => (a -> a -> n) -> 
                  (n -> Bool) -> 
                 (model -> ReactiveOutput a) -> 
                     ModelWire model ManyToMany
 distanceBased d pred = predicateDynamic (\ a b -> pred $ d a b)
+
+-}
 
 euclidean :: [a -> Double] -> a -> a -> Double
 euclidean = normed 2

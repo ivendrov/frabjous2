@@ -196,9 +196,14 @@ evolvePopulation extractPop createAgent state = helper state where
 -------------------------------
 
 data Edge e = Edge { index :: (Int, Int), edge :: e}
+data Ref a e = Ref { refIndex :: Int, refAgent :: a, refEdge :: e}
 
 reverseEdge :: Edge e -> Edge e
 reverseEdge e = e {index = swap (index e)}
+
+
+-- | gets the agents from an adjacency list of edges 
+agents = fmap (refAgent)
 
 
 -- | The type of adjacency lists in a network. Distinguishes between agents connected to exactly one, possibly one, or many
@@ -208,6 +213,11 @@ data Adj e =
           One e 
         | MaybeOne (Maybe e) 
         | Many [e] 
+        
+instance Functor Adj where
+        fmap f (One e) = One (f e)
+        fmap f (MaybeOne e) = MaybeOne (fmap f e)
+        fmap f (Many es) = Many (fmap f es)
         
 -- accessors
 fromMany :: Adj e -> [e]
@@ -225,30 +235,28 @@ fromOne _ = error "Internal error: called fromOne on Adj that isn't of type One"
                 
 
 
--- | methods networks need to have
-vertices1, vertices2 :: Network e -> [Int]
-view1, view2 :: Network e -> Int -> Adj (Edge e)
+-- | network methods
+view1, view2 :: Network e -> Int -> Collection a -> Adj (Ref a e)
 addEdges :: [Edge e] ->Network e -> Network e
 removeEdges :: [(Int, Int)] -> Network e -> Network e
 toIds :: Network e -> [(Int, Int)]
     
     -- TODO removeVertices1, removeVertices2,fromEdges
     
-data Network e = Network { accesses :: (Syntax.Link, Syntax.Link), edges :: [Edge e] }
+data Network e = Network { accesses :: (Syntax.Link, Syntax.Link), vertices1, vertices2 :: [Int], edges :: [Edge e]}
 
 
-vertices1 = map (fst . index) . edges
-vertices2 = map (snd . index) . edges
      
 addEdges es network = network {edges = es ++ (edges network)}
 removeEdges lst network = network {edges = filter (\e -> not $ (index e) `List.elem` lst) (edges network)}
      
-view1 (Network {accesses = (a1, _), edges}) i = 
+view1 (Network {accesses = (a1, _), edges}) i collection = 
         case a1 of
                 Syntax.One -> undefined -- TODO
                 Syntax.MaybeOne -> undefined -- TODO
-                Syntax.Many -> Many $ filter (\e -> fst (index e) == i) edges -- TODO optimize by precomputing!
-view2 (Network accesses edges) = view1 (Network (swap accesses) (map reverseEdge edges))
+                Syntax.Many -> Many . map (toRef collection) . filter (\e -> fst (index e) == i) $ edges -- TODO optimize by precomputing!
+      where toRef collection (Edge (_, i) e) = Ref i (collection IntMap.! i) e
+view2 n@(Network {accesses, edges}) = view1 (n {accesses = (swap accesses), edges = (map reverseEdge edges)})
 
 toIds = map (index) . edges
         
@@ -257,7 +265,11 @@ toIds = map (index) . edges
      
 
 
-
+{-networkView :: Int 
+                -> (Network e -> Int -> Collection a -> Adj (Ref a e)) 
+                -> (ModelOutput a e -> Network e) 
+                -> (ModelOutput a e -> ReactiveOutput a)
+                -> ModelWire (AgentInput (ModelOutput a e) a) (Adj (Ref a e)) -}
 networkView id viewer networkAccess populationAccess = 
     arr (\s -> viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s))
 
