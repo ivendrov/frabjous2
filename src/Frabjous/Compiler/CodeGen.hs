@@ -118,18 +118,32 @@ showAgentWire populations networks (agentName, Agent attributes)  = prettify $
           env = map mkWire fieldNames ++ networkAttributes ++ map initAttribute fieldNames
           mkWire name = printf "%s = function (get%s . prevState)" name (capitalize name)
           networkAttributes = concatMap extractAttributes (Map.toList networks)
+          
+          -- | generate network access "attributes" for each network and agent
           extractAttributes :: (Name, NetworkContext) -> [String]
-          extractAttributes (networkName, Symmetric {population = population , access = access@(accessType, accessName)}) = 
-              if populations Map.! population == agentName
-              then [printf "%s = arr (%s . networkView id view1 %s %s)" accessName (extractFromAdj access) networkName population]
-              else []
+          extractAttributes (networkName, context) = case context of
+                Symmetric {population, access} ->
+                        networkView access population population "Symmetric"
+                Asymmetric {population, access1, access2} ->
+                        networkView access1 population population "1"
+                        ++ networkView access2 population population "2"
+                Bipartite {population1, population2, access1, access2} ->
+                        networkView access1 population1 population2 "1"
+                        ++ networkView access2 population2 population1 "2"
+                        
+            where networkView :: NetworkAccess -> String -> String -> String -> [String]
+                  networkView access populationCheck populationName viewSuffix = 
+                     if (populations Map.! populationCheck == agentName)
+                     then  [printf "%s = arr (%s . networkView id view%s %s %s)"
+                                (snd access) (extractFromAdj access) viewSuffix networkName populationName]
+                     else []
               
-          extractFromAdj :: NetworkAccess -> String
-          extractFromAdj (accessType, accessName) = printf "unsafeFromAdj %s \"%s\"" (accessor accessType) accessName
-                where accessor Many = "fromMany"
-                      accessor MaybeOne = "fromMaybeOne"
-                      accessor One = "fromOne"
-          -- TODO add cases for other network types
+                  extractFromAdj :: NetworkAccess -> String
+                  extractFromAdj (accessType, accessName) = printf "unsafeFromAdj %s \"%s\"" (accessor accessType) accessName
+                        where accessor Many = "fromMany"
+                              accessor MaybeOne = "fromMaybeOne"
+                              accessor One = "fromOne"
+                              
           initAttribute name = printf "%s = %s initAgent" (toInit name) (toAccessor name)
 
           -- the local wires

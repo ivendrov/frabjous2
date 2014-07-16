@@ -236,7 +236,7 @@ fromOne _ = Nothing
 
 
 -- | network methods
-view1, view2 :: Network e -> Int -> Collection a -> Adj (Ref a e)
+view1, view2, viewSymmetric :: Network e -> Int -> Collection a -> Adj (Ref a e)
 addEdges :: [Edge e] ->Network e -> Network e
 removeEdges :: [(Int, Int)] -> Network e -> Network e
 toIds :: Network e -> [(Int, Int)]
@@ -257,6 +257,8 @@ view1 (Network {accesses = (a1, _), edges}) i collection =
                 Syntax.Many -> Many . map (toRef collection) . filter (\e -> fst (index e) == i) $ edges -- TODO optimize by precomputing!
       where toRef collection (Edge (_, i) e) = Ref i (collection IntMap.! i) e
 view2 n@(Network {accesses, edges}) = view1 (n {accesses = (swap accesses), edges = (map reverseEdge edges)})
+
+viewSymmetric n = view1 (n { edges = edges n ++ (map reverseEdge (edges n))} )
 
 toIds = map (index) . edges
         
