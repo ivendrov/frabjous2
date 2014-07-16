@@ -119,10 +119,16 @@ showAgentWire populations networks (agentName, Agent attributes)  = prettify $
           mkWire name = printf "%s = function (get%s . prevState)" name (capitalize name)
           networkAttributes = concatMap extractAttributes (Map.toList networks)
           extractAttributes :: (Name, NetworkContext) -> [String]
-          extractAttributes (networkName, Symmetric {population = population , access = (_, accessName)}) = 
+          extractAttributes (networkName, Symmetric {population = population , access = access@(accessType, accessName)}) = 
               if populations Map.! population == agentName
-              then [printf "%s = arr (fromMany) . networkView id view1 %s %s" accessName networkName population]
+              then [printf "%s = arr (%s . networkView id view1 %s %s)" accessName (extractFromAdj access) networkName population]
               else []
+              
+          extractFromAdj :: NetworkAccess -> String
+          extractFromAdj (accessType, accessName) = printf "unsafeFromAdj %s \"%s\"" (accessor accessType) accessName
+                where accessor Many = "fromMany"
+                      accessor MaybeOne = "fromMaybeOne"
+                      accessor One = "fromOne"
           -- TODO add cases for other network types
           initAttribute name = printf "%s = %s initAgent" (toInit name) (toAccessor name)
 

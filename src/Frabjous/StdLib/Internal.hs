@@ -220,17 +220,17 @@ instance Functor Adj where
         fmap f (Many es) = Many (fmap f es)
         
 -- accessors
-fromMany :: Adj e -> [e]
-fromMany (Many es) = es
-fromMany _ = error "Internal error: called fromMany on Adj that isn't of type Many"
+fromMany :: Adj e -> Maybe [e]
+fromMany (Many es) = Just es
+fromMany _ = Nothing
 
-fromMaybeOne :: Adj e -> Maybe e
-fromMaybeOne (MaybeOne e) = e
-fromMaybeOne _ = error "Internal error: called fromMaybeOne on Adj that isn't of type MaybeOne"
+fromMaybeOne :: Adj e -> Maybe (Maybe e)
+fromMaybeOne (MaybeOne e) = Just e
+fromMaybeOne _ = Nothing
 
-fromOne :: Adj e -> e
-fromOne (One e) = e
-fromOne _ = error "Internal error: called fromOne on Adj that isn't of type One"
+fromOne :: Adj e -> Maybe e
+fromOne (One e) = Just e
+fromOne _ = Nothing
 
                 
 
@@ -264,14 +264,27 @@ toIds = map (index) . edges
 
      
 
+-- | helper function, computes an agent's adjacency list in a particular network
+networkView :: Int -- ^ the index of the agent from whose perspective we're viewing the network
+                -> (Network e -> Int -> Collection a -> Adj (Ref a e))  -- ^ the view function (view1, view2, or viewSymmetric)
+                -> (model -> Network e) -- ^ the network accessor
+                -> (model -> ReactiveOutput a) -- ^ the (target) population accessor
+                -> (AgentInput model a) -> (Adj (Ref a e))
+networkView id viewer networkAccess populationAccess s =
+         viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s)
 
-{-networkView :: Int 
-                -> (Network e -> Int -> Collection a -> Adj (Ref a e)) 
-                -> (ModelOutput a e -> Network e) 
-                -> (ModelOutput a e -> ReactiveOutput a)
-                -> ModelWire (AgentInput (ModelOutput a e) a) (Adj (Ref a e)) -}
-networkView id viewer networkAccess populationAccess = 
-    arr (\s -> viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s))
+-- | extracts the actual adjacency structure from inside an Adj, throws runtime error if the wrong accessor is used
+-- | TODO eliminate runtime error
+unsafeFromAdj :: (Adj a -> Maybe b) -- ^ the accessor (one of fromMany, fromMaybeOne, fromOne)
+            -> String -- ^ the network access name, used in runtime error message
+            -> Adj a -- ^ the Adj instance
+            -> b
+            
+unsafeFromAdj accessor name adj = 
+        case accessor adj of 
+             Just ans -> ans
+             Nothing -> error $  "Runtime error: network access " ++ name ++ " used incorrectly"
+           
 
 agentPairs :: Network e -> ReactiveOutput a -> ReactiveOutput a -> [(a, a)]
 agentPairs network pop1 pop2 = map peeps (toIds network) where
