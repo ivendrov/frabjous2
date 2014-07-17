@@ -1,7 +1,7 @@
 #!/bin/sh
 
 frabjousc < frabjous-src/${1}.fj > middle
-cat top middle bottom > output/${1}.hs
+cat middle bottom > output/${1}.hs
 ghc output/${1}.hs
 rm middle
 

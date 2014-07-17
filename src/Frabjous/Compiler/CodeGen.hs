@@ -41,7 +41,8 @@ generateCode :: Program -> String
 generateCode (Program agents populations networks statistics initial othercode) = 
     if (Map.null initial) then error "no initial state specified!"
     else
-        unlines [unlines (map contents othercode),
+        unlines [imports,
+                unlines (map contents othercode),
                 showAgentDeclaration agents,
                 showPopulationDeclarations (Map.keys populations),
                 showNetworkDeclarations (Map.keys networks),
@@ -206,7 +207,51 @@ showInitialState populations networks initials = prettify $
         startingNetworks = "startingNetworks = " ++ toMap (++"Initial") (Map.keys networks)
         decs =  map (uncurry (printf "%sInitial = %s")) (Map.toList (Map.map contents initials))
 
-                                                    
+
+-- | The imports at the top of the generated Haskell file                                                    
+imports :: String
+imports = unlines 
+       ["{-# LANGUAGE OverloadedStrings #-}",
+        "{-# LANGUAGE NoMonomorphismRestriction #-} ",
+        "{-# LANGUAGE Arrows #-}",
+        "{-# LANGUAGE NamedFieldPuns #-}",
+        "{-# LANGUAGE RecordWildCards #-}",
+        "{-# LANGUAGE FlexibleInstances #-}",
+        "",
+        "",
+        "module Main where",
+        
+        "import Control.Wire (mkGen, (.), stepWireP, WireP)",
+        "import Control.Monad hiding (when, mapM, sequence)",
+        "import Control.Monad.Random hiding (fromList)",
+        "import Control.Monad.Identity (Identity)",
+        "import Prelude hiding ((.), id, mapM, sequence, length, until, Real)",
+        "import Control.Arrow",
+        "import qualified Data.List as List",
+        "import Data.Either (rights)",
+        "import qualified Data.Traversable as Traversable",
+        "import Control.Wire.Classes",
+        "import System.IO",
+        "import System.Environment (getArgs)",
+        "import Data.Aeson",
+        "import Data.Text (Text)",
+        "import qualified Data.Vector as Vector",
+        "import qualified Data.ByteString.Lazy as ByteString",
+        "import Frabjous.StdLib",
+        "import Frabjous.StdLib.Internal",
+        "",
+        "",
+        "import Data.Map (Map, (!))",
+        "import qualified Data.Map as Map",
+        "import Data.IntMap (IntMap)",
+        "import qualified Data.IntMap as IntMap",
+        "import Data.IntSet (IntSet)",
+        "import qualified Data.IntSet as IntSet"]
+
+
+
+
+
 
     
     
