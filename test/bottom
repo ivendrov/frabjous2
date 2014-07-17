@@ -5,7 +5,7 @@ observers = [(processStatistics statistics, stderr), (toGUI, stdout)]
 
 main = do 
   args <- getArgs
-  if length args < 2 
+  if length args /= 2 
   then putStrLn "Call with two arguments, duration and timestep"
   else do
       let [t, step] = map read args
