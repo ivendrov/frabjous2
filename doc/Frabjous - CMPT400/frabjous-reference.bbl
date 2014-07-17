@@ -1,0 +1,37 @@
+\begin{thebibliography}{1}
+
+\bibitem{yampa}
+Antony Courtney, Henrik Nilsson, and John Peterson.
+\newblock The yampa arcade.
+\newblock In {\em 2003 ACM SIGPLAN workshop on Haskell}, Haskell '03, pages
+  7--18, New York, NY, USA, 2003. ACM.
+
+\bibitem{fran}
+Conal Elliott and Paul Hudak.
+\newblock Functional reactive animation.
+\newblock {\em International Conference on Functional Programming}, pages
+  263--273, 1997.
+
+\bibitem{frpcont}
+Henrik Nilsson, Antony Courtney, and John Peterson.
+\newblock Functional reactive progamming, continued.
+\newblock {\em 2002 ACM SIGPLAN workshop on Haskell}, pages 51--64, 2002.
+
+\bibitem{system_dyn_approaches}
+Nathaniel Osgood.
+\newblock Systems dynamics and agent-based approaches: Clarifying the
+  terminology and tradeoffs.
+\newblock {\em First International Congress of Business Dynamics}, 2006.
+
+\bibitem{system_dyn_tradeoffs}
+Nathaniel Osgood.
+\newblock Using traditional and agent based toolsets for system dynamics:
+  Present tradeoffs and future evolution.
+\newblock {\em 2007 International Conference on System Dynamics}, 2007.
+
+\bibitem{netwire}
+Ertugrul Soeylemez.
+\newblock Netwire, 2012.
+\newblock [Online; accessed 29-August-2013].
+
+\end{thebibliography}

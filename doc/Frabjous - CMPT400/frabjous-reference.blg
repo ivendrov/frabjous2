@@ -1,0 +1,51 @@
+This is BibTeX, Version 0.99d (TeX Live 2012)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: frabjous-reference.aux
+White space in argument---line 3 of file frabjous-reference.aux
+ : \citation{net
+ :               wire}
+I'm skipping whatever remains of this command
+The style file: plain.bst
+Database file #1: refs.bib
+You've used 6 entries,
+            2118 wiz_defined-function locations,
+            532 strings with 4853 characters,
+and the built_in function-call counts, 1889 in all, are:
+= -- 191
+> -- 70
+< -- 3
++ -- 29
+- -- 22
+* -- 100
+:= -- 311
+add.period$ -- 19
+call.type$ -- 6
+change.case$ -- 29
+chr.to.int$ -- 0
+cite$ -- 6
+duplicate$ -- 84
+empty$ -- 152
+format.name$ -- 22
+if$ -- 415
+int.to.chr$ -- 0
+int.to.str$ -- 6
+missing$ -- 5
+newline$ -- 33
+num.names$ -- 12
+pop$ -- 34
+preamble$ -- 1
+purify$ -- 23
+quote$ -- 0
+skip$ -- 70
+stack$ -- 0
+substring$ -- 98
+swap$ -- 27
+text.length$ -- 3
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 24
+warning$ -- 0
+while$ -- 19
+width$ -- 7
+write$ -- 68
+(There was 1 error message)

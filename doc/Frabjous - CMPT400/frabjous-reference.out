@@ -1,0 +1,23 @@
+\BOOKMARK [1][-]{section.1}{Overview}{}% 1
+\BOOKMARK [1][-]{section.2}{Background}{}% 2
+\BOOKMARK [2][-]{subsection.2.1}{Functional Reactive Programming}{section.2}% 3
+\BOOKMARK [2][-]{subsection.2.2}{Some Basic Operators}{section.2}% 4
+\BOOKMARK [2][-]{subsection.2.3}{Continuous Time Semantics}{section.2}% 5
+\BOOKMARK [1][-]{section.3}{The Frabjous Modelling Language}{}% 6
+\BOOKMARK [2][-]{subsection.3.1}{Overview}{section.3}% 7
+\BOOKMARK [2][-]{subsection.3.2}{History}{section.3}% 8
+\BOOKMARK [2][-]{subsection.3.3}{Agents}{section.3}% 9
+\BOOKMARK [3][-]{subsubsection.3.3.1}{Agent Declarations}{subsection.3.3}% 10
+\BOOKMARK [3][-]{subsubsection.3.3.2}{An example}{subsection.3.3}% 11
+\BOOKMARK [2][-]{subsection.3.4}{Populations}{section.3}% 12
+\BOOKMARK [2][-]{subsection.3.5}{Networks}{section.3}% 13
+\BOOKMARK [1][-]{section.4}{Frabjous and Haskell}{}% 14
+\BOOKMARK [1][-]{section.5}{The Model as a Whole}{}% 15
+\BOOKMARK [2][-]{subsection.5.1}{Initial State}{section.5}% 16
+\BOOKMARK [1][-]{appendix.A}{The Frabjous Standard Library}{}% 17
+\BOOKMARK [1][-]{appendix.B}{Some Example Models}{}% 18
+\BOOKMARK [1][-]{appendix.C}{Background}{}% 19
+\BOOKMARK [2][-]{subsection.C.1}{Functional Reactive Programming}{appendix.C}% 20
+\BOOKMARK [1][-]{appendix.D}{The Frabjous Modelling Language}{}% 21
+\BOOKMARK [2][-]{subsection.D.1}{Time-Varying Values}{appendix.D}% 22
+\BOOKMARK [1][-]{appendix.E}{Proposed Changes}{}% 23

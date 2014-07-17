@@ -1,0 +1,337 @@
+
+%\documentclass[oribibl]{llncs}
+\documentclass{article}
+
+
+\usepackage{mathptmx}
+\usepackage{latexsym}
+\usepackage{textcomp}
+\usepackage{mathcomp}
+\usepackage{stmaryrd}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+\usepackage{natbib}
+\usepackage{booktabs}
+\setlength{\parskip}{0cm}
+%\usepackage[compact]{titlesec}
+
+
+% load haskell
+\usepackage{listings}
+\usepackage{listings}
+\usepackage{lmodern}
+\lstloadlanguages{Haskell}
+\lstnewenvironment{code}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      escapeinside={(*}{*)},  
+      basicstyle=\small\ttfamily,
+      keywordstyle=\bfseries,
+      flexiblecolumns=false,
+      basewidth={0.5em,0.45em},
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 %{=}{{$=$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+               {\\\\}{{\char`\\\char`\\}}1 {>=}{{$\geq$}}2
+               {->}{{$\rightarrow$}}2 {<-}{{$\leftarrow$}}2
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {|}{{$\mid$}}1               
+    }
+\usepackage[caption=false]{subfig}
+\usepackage{color}
+\usepackage{alltt}
+
+%\usepackage{my-macros}
+
+%graphics stuff
+\usepackage{graphicx}
+\graphicspath{{pics/}}
+
+%borders around figures
+%\usepackage{float}
+%\floatstyle{boxed} 
+%\restylefloat{figure}
+\pagenumbering{arabic}
+\begin{document}
+\lstset{language=Haskell}
+\lstset{morekeywords={agent, population, network, with, by,t}}
+\lstset{emph={%  
+    (t)%
+    },emphstyle={\bfseries}%
+}%
+
+
+
+\title{Frabjous Language Reference}
+\date{April 8th, 2014}
+\maketitle
+{\center Ivan Vendrov \\ April 8th, 2014\\}
+\tableofcontents
+
+\section{Overview}
+Frabjous is a domain-specific language for agent-based modeling that aims to make it easier to develop, analyze, and share agent-based models by using state-of-the-art techniques from functional programming.\\
+
+Frabjous consists of a set of macros or syntactic extensions to the programming language \href{www.haskell.org}{Haskell}. Haskell is a popular functional programming language closely related to the \emph{lambda calculus}, the pre-eminent mathematical model of computation. We describe the relationship between Frabjous and Haskell in more detail in sections \hyperref[FrabjousAndHaskell]{\ref*{FrabjousAndHaskell}} and ???.
+
+This document provides 
+\begin{enumerate}
+\item the necessary background information on \emph{functional reactive programming}, the paradigm on which Frabjous is based (section 2)
+\item a complete syntactic and semantic description of the Frabjous language (all other sections)
+\end{enumerate}
+ 
+
+\section{Background}
+\subsection{Functional Reactive Programming}
+Functional reactive programming (FRP) is a paradigm for describing dynamic systems in a purely functional way by introducing time-varying values or \emph{signals} as first-class language entities. FRP has been applied to domains such as robotics \cite{robots}, games\cite{yampa}, and websites \cite{elm}, yielding remarkably concise specifications of complex systems.\\
+
+Frabjous is based on a variant of FRP called Arrowized Functional Reactive Programming (AFRP), which prohibits the direct manipulation of signals, replacing them with \emph{signal functions}, operators that take and produce functions of time.\\
+
+A familiar signal function is $\dfrac{d}{dt}$, which takes any function and produces its derivative with respect to time. To describe agent behaviour as a system of differential equations, this signal function is all we need. But by adding only a few more signal functions, we can describe a much richer variety of functions - including piecewise, impulse, and partially defined functions of time - which allows us to freely mix discrete and continuous behaviours in the same formalism.
+
+\subsection{Some Basic Operators}
+The simplest AFRP operator is \lstinline{constant}, which creates a signal function that ignores its input signal and produces the same value at all times. For example, the signal function \lstinline{constant 3} produces \lstinline{3} forever.\\
+
+A slightly more interesting operator is \lstinline{function}, which takes a regular function and applies it to each value of the input signal to produce the output signal. Using the composition operator `\lstinline{.}', which connects the output signal of its right argument to the input signal of its left argument, similar to function composition, we can write 
+
+\begin{code}
+	function (+1) . constant 3
+\end{code}
+
+to get a signal function that produces \lstinline{4} forever. Signal functions created using \lstinline{function} are \emph{stateless}, since their output at any time $t$ depends only on their input at time $t$, and not on the input history. \\
+
+ A familiar \emph{stateful} signal function is \lstinline{integrate}, the Riemann integration operator. For example,
+
+ \begin{code}
+ 	integrate 0 . constant 3
+ \end{code}
+ 
+ ignores its input signal and outputs the signal $s(t) = 3t$. \lstinline{integrate 0} can be though of as having an internal state which keeps track of the value of the integral up to the current time. \\
+ 
+ We can also directly specify a signal as a function of time using the operator \lstinline{timeFunction}, so the signal function \lstinline{timeFunction (3*)} has the same meaning as the preceding example.
+
+\subsection{Continuous Time Semantics}
+One of the key insights behind FRP is that specifying systems in continuous time vastly simplifies language semantics by providing a clean separation between the core system logic and execution concerns like the time-stepping and discretization mechanism. For agent-based modeling, continuous-time semantics have the added advantage that the time step becomes just another parameter, so models can be trivially analyzed for sensitivity to discretization effects.\\
+
+To take advantage of this insight, Frabjous models are specified using operators with continuous-time semantics. At execution time, these semantics are approximated with a given time step parameter. 
+
+For example, the signal function \lstinline{integrate i . f} conceptually outputs the signal 
+
+% AWKWARD: why the extra "i+"? Why not have integration take no arguments, then map (+i) over it?
+
+$$ s(t) = i+  \int_0^t f(u)du $$
+
+but it is computationally infeasible, in general, to compute this. A reasonable implementation of \lstinline{integrate}, using Euler integration, would actually output the signal
+
+$$ s'(t) =  i + \sum_{k=0}^n f(k\Delta t) \Delta t $$
+
+where $\Delta t$ is the desired time step and $ t \approx n\Delta t $. For a more accurate approximation, we could use Runge-Kutta or any other numerical integration method, but the only constraint on the implementation of \lstinline{integrate} is that it matches the continuous-time semantics \emph{in the limit as $\Delta t$ approaches $0$}.
+
+% MAYBE add a section about the "fundamental FRP operators" that generate all others - although, is
+% this entirely possible given operators like (.) and accum? 
+
+\section{The Frabjous Modelling Language}
+\subsection{Overview}
+At the very highest level, a Frabjous model consists of a set of populations evolving in time. Each population is a dynamic collection of agents; agents can be added to and removed from populations by processes such as birth, death, and immigration. Furthermore, any pair of populations can be linked together by a network, which represents relationships between agents such as ``parent of" or ``neighbour of".
+
+An agent consists of a set of attributes such as income, age, or level of education. Attributes are signal functions which together comprise the evolving agent state, and are the main mechanism through which dynamic behaviour is specified. 
+
+\subsection{History}
+The problem of maintaining dynamic sets of interacting entities using FRP was recognized and addressed in \emph{The Yampa Arcade} by Courtney et al. Their approach consisted of
+
+\begin{enumerate}
+\item encapsulating the inputs and outputs of each agent in records.
+\item handling dynamic sets of signal functions by means of \emph{parallel switches}, very general operators which allowed a group of a signal functions to be treated as a signal function of groups. 
+\end{enumerate}
+
+Since Frabjous is intended to be usable by non-programmers, we specialize their approach to the agent-based modelling domain by providing special syntax for specifying agents, populations, and networks. 
+
+\subsection{Agents}
+\subsubsection{Agent Declarations}
+An agent declaration consists of an agent name and a list of attribute bindings with local type annotations: 
+
+\begin{code}
+agent AgentName { attr1 :: Type1 = exp1 ; ... ; attrN :: TypeN = expN }		
+\end{code}
+
+Here \lstinline{expJ} is a Haskell expression of type \lstinline{SF input TypeJ}, where \lstinline{input} represents the environment the agent depends on. In each expression, a signal function \lstinline{attr :: SF input Type} is in scope for each attribute \lstinline{attr :: Type} (including network attributes---see \ref{network}). \\
+
+The provided signal functions are the only way of accessing the environment, ensuring that any agent's attribute can only depend on 
+\begin{enumerate}
+\item Attributes of the same agent
+\item Attributes of adjacent agents in a network (see \ref{network})
+\end{enumerate}
+This restriction rules out many grossly inefficient dependencies, and makes the resulting models much easier to parallelize.\\
+
+The agent declaration also defines, at global scope, a new record type 
+\begin{code}
+data AgentName = AgentName { attr1 :: Type1, ... , attrN :: TypeN }
+\end{code}
+	
+Inside the agent declaration, the names of these accessors are overridden by signal functions, so \lstinline{getAttr1}, ... , \lstinline{getAttrN} can be used instead. Also, the initial value of each agent attribute (see \ref{initialState}) can be accessed using \lstinline{initAttr1}, ... , \lstinline{initAttrN}.
+
+\subsubsection{An example}
+The following code declares a new agent type \lstinline{Person} with two attributes. \lstinline{age} keeps track of the person's age starting from an initial value, while \lstinline{income} depends directly on \lstinline{age}.
+\begin{code}
+agent Person { 
+	age :: Real = integrate initAge . const 1 ;
+	income :: Int = function (ageToIncome) . age 
+		where ageToIncome a = if (a < 18) then 0 else 20000
+}
+\end{code}
+
+We can now define auxiliary functions on \lstinline{Person} using pure Haskell: 
+
+\begin{code}
+hasIncome :: Person -> Bool
+hasIncome p = income p > 0
+\end{code}
+
+% ABOVE MAY BELONG MORE IN THE FRABJOUS <-> HASKELL SECTION
+
+
+\subsection{Populations}
+% describe syntax
+
+% describe addition and removal, and when they take place
+
+\subsection{Networks}
+\label{network}
+
+% describe syntax (all variations) and when network change takes place
+
+
+% Now explain the (t) syntax
+% BUG IN IMPLEMENTATION: DOES NOT ALLOW the top-level attribute declaration to be a (t) declaration. Which is kind of silly. 
+% Talk about (t) syntax for functional dependencies, why it exists (the "expose functions of time" metaphor) and how it's just syntactic sugar for applicative functors
+
+
+
+% (3?) NOT DONE YET - differentiate standard library from language - what are the basic primitives? How can I let the
+% user specify functions such as "rate" and "count"? - something like, 
+% give them a function st -> input -> time -> (output, time), in the Random monad? 
+% that'll do all the creator functions, but what about functions that take wires as arguments? Switches & accumulators?
+% CRUCIAL QUESTION - do I let modeller write their own switches?
+
+
+
+
+
+
+
+
+\section{Frabjous and Haskell}
+\label{FrabjousAndHaskell}
+\section{The Model as a Whole}
+
+\subsection{Initial State}
+\label{initialState}
+
+dsafd
+
+\appendix{}
+% especially the weird extra-Haskell functions like "draw" and "uniform" and "gaussian" 
+\section{The Frabjous Standard Library}
+
+
+
+
+
+\section{Some Example Models}
+\section{Background}
+
+
+
+
+
+\subsection{Functional Reactive Programming}
+ 
+  An apparent weakness of Haskell is the difficulty of representing systems that vary with time, since there is no mechanism for changing state.  As pioneered by Elliott and Hudak, functional reactive programming (FRP) is a paradigm that augments functional programming with "behaviours" - values that change over time - as well as a set of primitive operations on these values \cite{fran}. Arrowized functional reactive programming (AFRP) is a version of FRP that shifts the focus onto functions between time-varying values, called signal functions\cite{frpcont}. AFRP allows complex, time-varying, locally stateful systems to be written in a declarative fashion, as demonstrated by Courtney et al \cite{yampa}. 
+  
+  The simplest AFRP operator is \lstinline{constant}, which defines a constant function with a given value. So the output of the signal function \lstinline{constant 1} is \lstinline{1} at all times, and for all inputs. 
+  Integration can also be viewed as a signal function, since it operates on a function of time and produces a function of time. So
+\begin{code}
+integral . constant 1
+\end{code}
+is a signal function that ignores its input and outputs the current time (\lstinline{'.'} is the Haskell function composition operator). 
+
+  Following the Netwire version of AFRP\cite{netwire}, we allow signal functions to sometimes not produce values. For example, \lstinline{rate} is a signal function that takes a time-varying number and produces a value at a rate specified by that number, so \lstinline{rate . constant 2} produces twice (on average) in a given time unit. This allows us to model, for example, the Poisson process: 
+\begin{code}
+poisson lambda = count (rate . constant lambda)
+\end{code}
+where \lstinline{count} is an operator that counts the number of instants that its argument produces a value, and \lstinline{lambda} is the rate parameter of the Poisson process. 
+
+  Another common signal operator is \lstinline{after}, which produces after a given length of time. Two signal functions can be combined in parallel using the \lstinline{<|> } operator, which acts like its left hand side when it produces, and like its right hand side otherwise, so 
+\begin{code}
+constant 1 . after 3 <|> constant 0
+\end{code}
+is a signal function that produces \lstinline{0} for the first three time units, then \lstinline{1} forever. 
+  
+    FRP can in fact be viewed as a generalization of differential equations.  An FRP program is essentially a set of equations between time-varying values (in other words, functions of time). But where differential equations are limited to the standard mathematical operations such as addition, multiplication, and the differentiation operator, FRP adds a number of operators (such as \lstinline{rate} and \lstinline{count}) that act on and produce a much richer variety of functions. The differentiation operator is only defined on smooth functions in a vector space, but FRP operators can produce piecewise and step functions of arbitrary sets, which allows us to model discrete processes like the Poisson process above. 
+  
+  We use FRP as the basis for our ABM language because its declarative nature provides the transparency, clarity, and concision usually associated with declarative modelling \cite{system_dyn_approaches, system_dyn_tradeoffs}, and because FRP has an explicit, formal semantics \cite{fran} that simplifies mathematical reasoning.
+
+
+
+\section{The Frabjous Modelling Language}
+
+At the very highest level, a Frabjous model consists of a set of populations evolving in time. Each population is a dynamic collection of agents; agents can be added to and removed from populations by processes such as birth, death, and immigration. Furthermore, any pair of populations can be linked together by a network, which represents relationships between agents.
+
+An agent consists of a set of attributes such as income, age, or level of education. Attributes are time-varying values which together comprise the evolving agent state, and are the main mechanism through which dynamic behaviour is specified. 
+
+The direct use of time-varying values is the only truly novel language feature of Frabjous, as the handling of populations and networks is mostly an issue of library design. Since time-varying values are the fundamental building blocks of Frabjous models, we proceed to discuss them in depth before presenting the full language. 
+
+\subsection{Time-Varying Values}
+
+Time-varying values are not specified in Frabjous directly, but implicitly by means of signal functions (introduced in). In particular, the dynamics of an agent attribute are specified by a signal function from the entire agent to the attribute; thus the value of an attribute at a particular time depends only on the values of other attributes up to that time. 
+
+   Normally one defines signal functions by combining simpler functions with one of the provided operators. For example, we might define the attribute age of an agent as follows: 
+\begin{code}
+ age = integral . constant 1
+\end{code}
+so the age of an agent is the amount of time elapsed since the agent was added to the model.
+
+   But how would we declare an attribute \lstinline{isAdult}, which should be  \lstinline{False} during the first 18 years of the agent's life, and  \lstinline{True} from the 18th birthday on? This is a special case of a functional dependency, when the value of an attribute is a function of other attributes.  To express functional dependencies in Frabjous, write it as a function, appending \lstinline{(t)} to the declared signal function and the signal functions it depends on. This serves to make the dependence on time explicit: 
+\begin{code}
+ isAdult(t) = age(t) >= 18
+\end{code}
+
+As a more elaborate example of this notation, the declaration
+\begin{code}
+income(t) = if (isAdult(t)) 
+    		   then 1000 * age(t) * (uniform (0.5, 1.5))(t)
+                   else 0 
+\end{code}
+defines the income of adults at any given time to be 1000 times their age multiplied by a random number drawn from a uniform distribution between 0.5 and 1.5, and the income of non-adults to be 0.
+
+
+
+
+%%%%%%%%%%%
+%  PROPOSED CHANGES %
+\section {Proposed Changes}
+\begin{enumerate}
+\item Attributes that lack a dynamic binding should be considered CONSTANTS, not wires (useful both for syntax and optimizations to have agent-level constants)
+\end{enumerate}
+
+%%%%%%%%%%%
+%	APPENDIX 	%
+%%%%%%%%%%%
+
+%\appendix
+%\section{Appendix}
+
+%source code for sir.hs
+%\lstinputlisting{src/sir.hs}
+
+
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+
+\end{document}
+\endinput
