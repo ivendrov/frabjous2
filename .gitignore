@@ -1,3 +1,4 @@
+test/output
 *~
 *.dyn_hi
 *.dyn_o
@@ -5,4 +6,5 @@
 *.o
 *.class
 .DS_Store
+/dist
 /.dist-buildwrapper
