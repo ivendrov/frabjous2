@@ -7,7 +7,7 @@
 --
 -- The entry point to the Frabjous Compiler
 ------------------------------------------------------------------------------
-
+module Frabjous.Compiler.Main (main) where
 -- Frabjous imports
 import qualified Frabjous.Compiler.Parser as Parser
 import qualified Frabjous.Compiler.CodeGen as CodeGen
