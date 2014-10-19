@@ -11,9 +11,7 @@
 
 
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE NamedFieldPuns #-}
@@ -81,8 +79,8 @@ stepWiresMapP wires dt inputs =
     let results = IntMap.mapWithKey (\key val -> stepWireP val dt (inputs IntMap.! key)) wires
         (lefts, rights) = IntMap.mapEither fst results 
         wires' = IntMap.map snd results
-        value = if (IntMap.null lefts) then rights
-                else error "wires in stepWiresP must produce"  -- if a single wire doesn't produce, nothing produces
+        value = if IntMap.null lefts then rights 
+        else error "wires in stepWiresP must produce"  -- if a single wire doesn't produce, nothing produces
        
         in (Right value, wires')
 
@@ -141,7 +139,7 @@ genNewAgent f initAgent = do
   g <- getSplit
   return (i, f g i initAgent)
 
-genNewAgents f initAgents = sequence (map (genNewAgent f) initAgents)
+genNewAgents f initAgents = mapM (genNewAgent f) initAgents
 
 type ModelMonad  = RandT StdGen (State ID)
 
@@ -149,7 +147,7 @@ type ModelWire = Wire LastException ModelMonad
 
 runModel :: ModelMonad a -> (StdGen, ID) -> (a,(StdGen, ID))
 runModel m (gen, id) = let state_output_gen = runRandT m gen
-                           ((output, gen'), id') = (State.runState state_output_gen id)
+                           ((output, gen'), id') = State.runState state_output_gen id
                        in (output, (gen', id'))
 -- purifyModel wire gen takes a wire in the Model monad and an initial generator and state,
 -- and makes it into a pure wire.
@@ -169,7 +167,7 @@ evolvePopulation :: (ModelOutput a e-> ReactiveOutput a) ->
                      (StdGen -> ID -> a -> AgentWire (ModelOutput a e) a) ->
                      PopulationState a e ->
                         PopulationWire (ModelOutput a e) a 
-evolvePopulation extractPop createAgent state = helper state where
+evolvePopulation extractPop createAgent = helper where
     helper  (PopulationState agentWires removal addition) = 
         mkGen $ \dt modelStateP -> do
           let prevAgents = collection . extractPop  $ modelStateP
@@ -182,10 +180,10 @@ evolvePopulation extractPop createAgent state = helper state where
                                              Right as -> as
           newAgentWires <- genNewAgents createAgent newAgents
           let newAgentIndices = map fst newAgentWires
-              output = ReactiveOutput {collection = (removeSet agents' deadAgents) `IntMap.union` 
+              output = ReactiveOutput {collection = removeSet agents' deadAgents `IntMap.union` 
                                                  IntMap.fromList (zip newAgentIndices newAgents),
                                        removed = deadAgents,
-                                       added = (IntSet.fromList newAgentIndices)}
+                                       added = IntSet.fromList newAgentIndices}
               newWires = removeSet agentWires' deadAgents `IntMap.union` IntMap.fromList newAgentWires
                            
           return (Right output, helper (PopulationState newWires removal' addition'))
@@ -202,7 +200,7 @@ reverseEdge e = e {index = swap (index e)}
 
 
 -- | gets the agents from an adjacency list of edges 
-agents = fmap (refAgent)
+agents = fmap refAgent
 
 
 -- | The type of adjacency lists in a network. Distinguishes between agents connected to exactly one, possibly one, or many
@@ -246,8 +244,8 @@ data Network e = Network { accesses :: (Syntax.Link, Syntax.Link), vertices1, ve
 
 
      
-addEdges es network = network {edges = es ++ (edges network)}
-removeEdges lst network = network {edges = filter (\e -> not $ (index e) `List.elem` lst) (edges network)}
+addEdges es network = network {edges = es ++ edges network}
+removeEdges lst network = network {edges = filter (\e -> index e `List.notElem` lst) (edges network)}
      
 view1 (Network {accesses = (a1, _), edges}) i collection = 
         case a1 of
@@ -255,11 +253,11 @@ view1 (Network {accesses = (a1, _), edges}) i collection =
                 Syntax.MaybeOne -> undefined -- TODO
                 Syntax.Many -> Many . map (toRef collection) . filter (\e -> fst (index e) == i) $ edges -- TODO optimize by precomputing!
       where toRef collection (Edge (_, i) e) = Ref i (collection IntMap.! i) e
-view2 n@(Network {accesses, edges}) = view1 (n {accesses = (swap accesses), edges = (map reverseEdge edges)})
+view2 n@(Network {accesses, edges}) = view1 (n{accesses = swap accesses, edges = map reverseEdge edges})
 
-viewSymmetric n = view1 (n { edges = edges n ++ (map reverseEdge (edges n))} )
+viewSymmetric n = view1 (n { edges = edges n ++ map reverseEdge (edges n)} )
 
-toIds = map (index) . edges
+toIds = map index . edges
         
      
 
@@ -270,7 +268,7 @@ networkView :: Int -- ^ the index of the agent from whose perspective we're view
                 -> (Network e -> Int -> Collection a -> Adj (Ref a e))  -- ^ the view function (view1, view2, or viewSymmetric)
                 -> (model -> Network e) -- ^ the network accessor
                 -> (model -> ReactiveOutput a) -- ^ the (target) population accessor
-                -> (AgentInput model a) -> (Adj (Ref a e))
+                -> AgentInput model a -> Adj (Ref a e)
 networkView id viewer networkAccess populationAccess s =
          viewer (networkAccess . modelState $ s) id (collection . populationAccess . modelState $ s)
 
@@ -289,7 +287,7 @@ unsafeFromAdj accessor name adj =
 
 agentPairs :: Network e -> ReactiveOutput a -> ReactiveOutput a -> [(a, a)]
 agentPairs network pop1 pop2 = map peeps (toIds network) where
-    peeps (id1, id2) = ((collection pop1) IntMap.! id1, collection pop2 IntMap.! id2)
+    peeps (id1, id2) = (collection pop1 IntMap.! id1, collection pop2 IntMap.! id2)
     
 
 
@@ -316,7 +314,7 @@ evolveModel (ModelState populationWires networkWires) =
         networkOutputs = Map.mapWithKey extractOutput networkResults
         extractOutput name (output, _) = case output of 
                                            Right x -> x
-                                           Left _ -> (networks input) ! name -- if network wire produces nothing, use previous value
+                                           Left _ -> networks input ! name -- if network wire produces nothing, use previous value
         output = outputAfterPop {networks = networkOutputs}  
 
     return (Right output, evolveModel (ModelState populationWires' networkWires'))
@@ -375,8 +373,7 @@ initialModelState structure initialState = do
   networks <- Traversable.sequence initNetworkActions
   let initialOutput = ModelOutput {populations = indexedInitialPops,
                                    networks = networks}
-  return $
-   (state, initialOutput)
+  return (state, initialOutput)
 
 
 createModel :: ModelStructure a e -> Rand StdGen (InitialState a e) -> StdGen -> WireP () (ModelOutput a e)
@@ -406,7 +403,7 @@ processStatistics stats =
         let results = Map.map (\val -> stepWireP val dt input) stats
             (_, rights) = Map.mapEither fst results
             stats' = Map.map snd results
-            output = if (not $ Map.null stats')
+            output = if not $ Map.null stats'
                      then (unlines . map (\(k,v) -> k ++ " = " ++ v) . Map.toList $ rights) ++ "\n"
                      else ""
         in (Right output, processStatistics stats')

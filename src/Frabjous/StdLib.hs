@@ -195,7 +195,7 @@ rate :: MonadRandom m  => Wire LastException m Double ()
 rate = mkGen $
            \dt lambda -> do 
              e <- getRandom
-             return (if (e < 1 - exp (-dt * lambda)) then Right () else Left mempty, rate)
+             return (if e < 1 - exp (-dt * lambda) then Right () else Left mempty, rate)
 
 -- a poisson process with rate parameter lambda
 poisson :: MonadRandom m => Double -> Wire LastException m a ()

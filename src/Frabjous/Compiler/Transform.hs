@@ -25,16 +25,16 @@ import Text.Printf (printf)
 -- | converts a haskell declaration to an equivalent one-line declaration 
 -- | by inserting braces and semicolons in accordance with the layout rules
 linearizeDecl :: String -> Either String String
-linearizeDecl = (fmap ppOneLine . readDecl) 
+linearizeDecl = fmap ppOneLine . readDecl
 
 -- | converts a haskell declaration to an equivalent pretty-printed declaration 
 prettifyDecl :: String -> Either String String
-prettifyDecl = (fmap ppPretty . readDecl) 
+prettifyDecl = fmap ppPretty . readDecl
 
 -- | desugars reactive syntax used in a Haskell declaration and all subordinate where-clauses
 -- | returns a linearized form
 desugarDecl :: String -> Either String String
-desugarDecl = (fmap (ppOneLine . desugar) . readDecl)
+desugarDecl = fmap (ppOneLine . desugar) . readDecl
 
 ppOneLine = Haskell.prettyPrintWithMode oneLineMode where
     oneLineMode = Haskell.defaultMode {Haskell.layout = Haskell.PPNoLayout}
@@ -85,7 +85,8 @@ desugarRhs (UnGuardedRhs rhs) = UnGuardedRhs $ Proc nullSrc (PVar (Ident "input"
 desugarRhs rhs = rhs -- don't do anything to guarded rhs
 
 desugarBinding :: Match -> Match
-desugarBinding m@(Match src name patterns typ rhs binds) = if (last patterns == PVar (Ident "t"))
+desugarBinding m@(Match src name patterns typ rhs binds) = 
+                                            if last patterns == PVar (Ident "t")
                                             then Match src name (init patterns) typ (desugarRhs rhs) binds
                                             else m
 

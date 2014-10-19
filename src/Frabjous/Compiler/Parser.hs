@@ -55,9 +55,8 @@ program = do
 block :: ProgramParser ()
 block = do
   whiteSpace
-  dec <- choice . map try $ [agentDec, populationDec, networkDec, statisticDec, initialState,
+  choice . map try $ [agentDec, populationDec, networkDec, statisticDec, initialState,
                              justHaskell]
-  return dec
 
 
 justHaskell :: ProgramParser ()
@@ -69,7 +68,7 @@ haskellBlock :: ProgramParser HaskellBlock
 haskellBlock = do
   notFollowedBy (choice (map symbol keywords))
   fstLine <- line
-  lines <- many (indentedLine)
+  lines <- many indentedLine
   return (HaskellBlock $ unlines (fstLine : lines))
 
 
@@ -103,11 +102,12 @@ attributeDec = do
   whiteSpace -- TODO be able to read multiple empty lines
   code <- many (noneOf ";{}")
   whiteSpace -- TODO same here
-  return (Attribute{ name = fieldName, 
-                     annotation = cc ++ " " ++ ty,
-                     code = if (null code) then Nothing
-                             else Just $ HaskellBlock $ reactiveSyntax ++ code}
-                     )
+  return Attribute{
+                name = fieldName, 
+                annotation = cc ++ " " ++ ty,
+                code =
+                    if null code then Nothing 
+                    else Just $ HaskellBlock $ reactiveSyntax ++ code}
 
 
 populationDec = do
@@ -139,12 +139,12 @@ networkDec = do
   context <- symmetricContext -- TODO give options for asymmetric and bipartite networks as well
   symbol "="
   code <- haskellBlock
-  updateState (addNetwork name (Network {context = context, networkSpec = code}))
+  updateState (addNetwork name Network{context = context, networkSpec = code})
          where symmetricContext = do
                  a <- networkAccess
                  symbol "in"
                  p <- identifier
-                 return (Symmetric { population = p, access = a})
+                 return Symmetric { population = p, access = a}
   
 networkAccess :: GenParser Char st NetworkAccess
 networkAccess = do

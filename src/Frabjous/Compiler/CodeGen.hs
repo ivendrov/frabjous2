@@ -39,7 +39,7 @@ toInit str = "init" ++ capitalize str
 
 generateCode :: Program -> String
 generateCode (Program agents populations networks statistics initial othercode) = 
-    if (Map.null initial) then error "no initial state specified!"
+    if Map.null initial then error "no initial state specified!"
     else
         unlines [imports,
                 unlines (map contents othercode),
@@ -54,11 +54,11 @@ generateCode (Program agents populations networks statistics initial othercode) 
 
 showAgentDeclaration :: Map Name Agent -> String
 showAgentDeclaration agents = 
-    let showAgent (name, (Agent attributes)) = 
-            printf "%s { %s }" name (intercalate ", " . map (showAttr) $ attributes)
+    let showAgent (name, Agent attributes) = 
+            printf "%s { %s }" name (intercalate ", " . map showAttr $ attributes)
         showAttr (Attribute {name, annotation, code =_}) = printf "%s %s" name annotation
     in printf "data Agent = %s deriving Show\n" 
-       (intercalate " | " . map (showAgent) $ Map.toList agents)
+       (intercalate " | " . map showAgent $ Map.toList agents)
        ++ showAttributeAccessors (nub . concatMap (map name . attributes) $ Map.elems agents)
 
 showAttributeAccessors :: [Name] -> String
@@ -134,7 +134,7 @@ showAgentWire populations networks (agentName, Agent attributes)  = prettify $
                         
             where networkView :: NetworkAccess -> String -> String -> String -> [String]
                   networkView access populationCheck populationName viewSuffix = 
-                     if (populations Map.! populationCheck == agentName)
+                     if populations Map.! populationCheck == agentName
                      then  [printf "%s = arr (%s . networkView id view%s %s %s)"
                                 (snd access) (extractFromAdj access) viewSuffix networkName populationName]
                      else []
@@ -150,7 +150,7 @@ showAgentWire populations networks (agentName, Agent attributes)  = prettify $
           -- the local wires
           activeAttributes = filter (isJust . code) attributes
           localWires = map localWire activeAttributes
-          localWire (Attribute {name = name, code = Just (HaskellBlock (rhs)), ..}) = 
+          localWire (Attribute {name = name, code = Just (HaskellBlock rhs), ..}) = 
               desugar (name ++ "Wire " ++ rhs)
 
    
@@ -185,9 +185,9 @@ showModelStructure populations networks = prettify $
         additionWires = map additionWire (Map.toList populations)
         networkWires = map networkWire (Map.toList networks)
         removalWire (name, population) = 
-            linearize (printf "%sRemove = %s" name (contents (removal (population))))
+            linearize (printf "%sRemove = %s" name (contents (removal population)))
         additionWire (name, population) = 
-            linearize (printf "%sAdd = %s" name (contents (addition (population))))
+            linearize (printf "%sAdd = %s" name (contents (addition population)))
         networkWire (name, network) = 
             linearize (printf "%sWire = %s" name (contents (networkSpec network)))
 
